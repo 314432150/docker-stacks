@@ -1,0 +1,28 @@
+# ==================== Home Assistant 智能家居 ====================
+services:
+  homeassistant:
+    image: ghcr.1ms.run/home-assistant/home-assistant:latest
+    container_name: homeassistant
+    restart: unless-stopped
+    user: "${NAS_PUID}:${NAS_PGID}"
+
+    # host 模式让 HA 自动发现局域网设备
+    network_mode: host
+
+    # 特权模式，HA 需要访问硬件和系统资源
+    privileged: true
+
+    volumes:
+      - ./data/config:/config # 配置、插件、数据库
+      - /etc/localtime:/etc/localtime:ro # 同步宿主机时间
+      - /run/dbus:/run/dbus:ro # 与宿主机系统服务通信
+
+    environment:
+      TZ: ${TZ}
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8123/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s # HA 启动较慢

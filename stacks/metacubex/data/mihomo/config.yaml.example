@@ -1,0 +1,115 @@
+mixed-port: 7890 # HTTP/SOCKS 混合代理端口，供其他 Docker 容器和局域网设备使用
+allow-lan: true # 允许局域网访问代理入口
+bind-address: "*" # 监听所有网卡，不限制 LAN 来源 IP
+mode: rule # 按 rules 规则分流
+log-level: info # 日常运行建议 info，排障时可临时改 debug
+ipv6: false # 未明确使用 IPv6 时先关闭，减少 DNS 和分流不确定性
+unified-delay: true # 统一延迟测试口径，面板显示和自动选择更稳定
+tcp-concurrent: true # 多 IP 域名并发建连，优先使用最快握手结果
+
+# 首次启动或缺失时，Mihomo 会从此处下载 geodata
+geox-url:
+  geoip: "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+  geosite: "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+  mmdb: "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb"
+
+external-controller: 0.0.0.0:9090 # REST API 监听地址，MetaCubeXD 面板连接这里
+secret: "CHANGE_ME_TO_A_STRONG_SECRET" # 公网经 Lucky 暴露面板时必须改成强随机密钥
+
+external-controller-cors:
+  allow-origins:
+    - "*" # 允许 MetaCubeXD 前端跨域访问 Mihomo API
+  allow-private-network: true # 允许浏览器从公网/域名页面访问内网 API 场景
+
+profile:
+  store-selected: true # 保存策略组手动选择，重启后不丢
+  store-fake-ip: true # 持久化 fake-ip 映射，减少重启后的连接错乱
+
+dns:
+  enable: true # 启用 Mihomo 内置 DNS
+  ipv6: false # 不返回 AAAA，避免容器误走不可用 IPv6
+  enhanced-mode: fake-ip # 保留域名语义，提升规则命中准确度
+  fake-ip-range: 198.18.0.1/16 # fake-ip 专用保留网段
+  use-hosts: true # 读取 hosts，方便局域网和容器内自定义解析
+  default-nameserver:
+    - 223.5.5.5 # 用于解析 DoH/DoT 服务器域名
+    - 119.29.29.29 # 用于解析 DoH/DoT 服务器域名
+  nameserver-policy:
+    "+.beibeicloud.shop":
+      - 223.5.5.5 # 订阅域名冷启动解析，避免海外 DoH 超时影响 provider 拉取
+      - 119.29.29.29 # 订阅域名冷启动解析备用
+  nameserver:
+    - 223.5.5.5 # 国内 UDP DNS，冷启动时最稳
+    - 119.29.29.29 # 国内 UDP DNS 备用
+    - https://dns.alidns.com/dns-query # 国内 DoH，直连解析优先
+    - https://doh.pub/dns-query # 国内 DoH，直连解析备用
+  fake-ip-filter:
+    - "*.lan" # 局域网域名返回真实 IP
+    - "*.local" # mDNS/本地域名返回真实 IP
+    - "localhost" # 本机域名返回真实 IP
+    - "+.home.arpa" # 家庭网络保留域返回真实 IP
+    - "+.msftconnecttest.com" # Windows 联网检测返回真实 IP
+    - "+.msftncsi.com" # Windows 联网检测返回真实 IP
+    - "time.*.com" # 时间同步返回真实 IP
+    - "+.pool.ntp.org" # NTP 返回真实 IP
+    - "stun.*.*" # STUN 返回真实 IP
+    - "+.stun.*.*" # STUN 返回真实 IP
+
+proxy-providers:
+  beibei:
+    type: http # 从订阅地址拉取节点
+    url: "https://your-subscription-url" # 订阅地址，替换为你的订阅链接
+    interval: 3600 # 每小时刷新订阅
+    path: ./providers/beibei.yaml # 订阅缓存文件，避免和主配置混放
+    health-check:
+      enable: true # 启用节点可用性检查
+      url: https://www.gstatic.com/generate_204 # 使用 HTTPS，避免 HTTP 测速被劫持或 HEAD 请求不兼容
+      interval: 600 # 每 10 分钟检查一次
+    override:
+      udp: true # 尽量启用 UDP，兼容媒体、QUIC、部分刮削请求
+
+proxy-groups:
+  - name: 🚀 自动选择
+    type: url-test
+    use:
+      - beibei
+    url: https://cp.cloudflare.com/generate_204 # 自动测速地址
+    interval: 600 # 每 10 分钟测速一次
+    tolerance: 100 # 延迟差小于 100ms 时减少频繁切换
+
+  - name: 🛟 故障转移
+    type: fallback
+    use:
+      - beibei
+    url: https://cp.cloudflare.com/generate_204 # 故障检测地址
+    interval: 600 # 每 10 分钟检测一次
+
+  - name: 🅱️ BeiBei
+    type: select
+    proxies:
+      - 🚀 自动选择
+      - 🛟 故障转移
+      - DIRECT
+    use:
+      - beibei
+
+  - name: 🌐 代理选择
+    type: select
+    proxies:
+      - 🚀 自动选择
+      - 🛟 故障转移
+      - 🅱️ BeiBei
+      - DIRECT
+
+rules:
+  - DOMAIN-SUFFIX,beibeicloud.shop,DIRECT # 订阅服务直连
+  - DOMAIN-SUFFIX,local,DIRECT # 本地域名直连
+  - DOMAIN-SUFFIX,lan,DIRECT # 局域网域名直连
+  - DOMAIN-SUFFIX,home.arpa,DIRECT # 家庭网络保留域直连
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve # Docker/内网地址直连
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve # 回环地址直连
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve # Docker/内网地址直连
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve # 局域网地址直连
+  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve # Tailscale/CGNAT 常见地址直连
+  - GEOIP,CN,DIRECT # 中国大陆 IP 直连
+  - MATCH,🌐 代理选择 # 其余流量默认交给代理选择组

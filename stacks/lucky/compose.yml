@@ -1,0 +1,14 @@
+# ==================== Lucky 网络管理 ====================
+services:
+  lucky:
+    image: gdy666/lucky:v3
+    container_name: lucky
+    restart: unless-stopped
+    user: "${NAS_PUID}:${NAS_PGID}"
+
+    # host 模式由 Lucky 自身管理端口监听
+    network_mode: host
+
+    volumes:
+      - ./data/conf:/app/conf              # 持久化配置
+      - /var/run/docker.sock:/var/run/docker.sock  # 管理容器/获取证书等

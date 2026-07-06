@@ -1,0 +1,20 @@
+# ==================== Vaultwarden 密码管理器 ====================
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    user: "${NAS_PUID}:${NAS_PGID}"
+
+    ports:
+      - 40031:80  # 宿主机 40031，避免与 80 冲突
+
+    volumes:
+      - ./data:/data  # 数据库和附件
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:80/alive"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

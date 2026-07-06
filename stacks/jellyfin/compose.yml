@@ -1,0 +1,33 @@
+# ==================== Jellyfin 媒体服务器 ====================
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    user: "${NAS_PUID}:${NAS_PGID}"
+    restart: unless-stopped
+
+    # host 模式让 Jellyfin 直接使用宿主机网络，方便 DLNA/投屏发现
+    network_mode: host
+
+    # 挂载核显设备，启用硬件编解码
+    devices:
+      - /dev/dri:/dev/dri
+
+    volumes:
+      - ./data/config:/config                         # 配置、插件、元数据
+      - ./data/cache:/cache                             # 转码缓存（可丢弃，已在 .gitignore 排除）
+      - ${MEDIA_ROOT}:/media                          # 媒体库（宿主机绝对路径，见根 .env）
+
+    environment:
+      JELLYFIN_PublishedServerUrl: http://${NAS_IP}:8096  # 客户端远程访问地址
+      HTTP_PROXY: ${PROXY_HTTP}
+      HTTPS_PROXY: ${PROXY_HTTP}
+      NO_PROXY: ${NO_PROXY}
+      TZ: ${TZ}
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8096/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3

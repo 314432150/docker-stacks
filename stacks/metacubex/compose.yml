@@ -1,0 +1,74 @@
+services:
+  # ==================== Mihomo 代理内核 ====================
+  mihomo:
+    image: metacubex/mihomo:latest
+    container_name: mihomo
+    restart: unless-stopped
+
+    # host 模式直接监听宿主机端口，Mihomo 配置中声明监听端口
+    network_mode: host
+
+    # NET_ADMIN：TUN/路由/iptables；NET_BIND_SERVICE：绑定低位端口
+    cap_add:
+      - NET_ADMIN
+      - NET_BIND_SERVICE
+
+    # TUN 设备，透明代理/Fake-IP 需要
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    volumes:
+      - ./data/mihomo:/root/.config/mihomo # 配置、规则集、Country.mmdb
+      - /etc/localtime:/etc/localtime:ro # 同步宿主机时间
+
+    environment:
+      TZ: "Asia/Shanghai"
+      HOME: "/root"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:9090"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # ==================== MetaCubeXD Web 面板 ====================
+  metacubexd:
+    image: ghcr.1ms.run/metacubex/metacubexd:latest
+    container_name: metacubexd
+    restart: unless-stopped
+    user: "${NAS_PUID}:${NAS_PGID}"
+
+    ports:
+      - "8080:80" # Web 面板入口，访问 http://<NAS_IP>:8080
+
+    volumes:
+      - /etc/localtime:/etc/localtime:ro # 同步宿主机时间
+
+    environment:
+      DEFAULT_BACKEND_URL: "http://${NAS_IP}:9090" # 连接 Mihomo API
+      TZ: ${TZ}
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      test:
+        ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8080/api/control/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+    depends_on:
+      mihomo:
+        condition: service_started # 先启动内核再启动面板

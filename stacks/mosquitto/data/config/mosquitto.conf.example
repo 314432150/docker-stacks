@@ -1,0 +1,13 @@
+# MQTT 监听端口
+listener 1883 0.0.0.0
+
+# 允许匿名连接（Home Assistant 通常用用户名密码，先开匿名测试连接）
+allow_anonymous true
+
+# 持久化数据目录（容器内路径）
+persistence true
+persistence_location /mosquitto/data
+
+# 日志
+log_dest file /mosquitto/log/mosquitto.log
+log_dest stdout

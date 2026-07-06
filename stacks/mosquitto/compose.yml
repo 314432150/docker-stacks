@@ -1,0 +1,14 @@
+# ==================== Mosquitto MQTT Broker ====================
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    restart: unless-stopped
+    user: "${NAS_PUID}:${NAS_PGID}"
+
+    ports:
+      - "1883:1883"                     # MQTT 标准端口
+
+    volumes:
+      - ./data/config:/mosquitto/config # 配置文件目录（含 mosquitto.conf）
+      - ./data/data:/mosquitto/data     # 持久化消息

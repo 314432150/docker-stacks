@@ -1,0 +1,27 @@
+# ==================== 数据目录策略 ====================
+# 仓库即模板：仅保留目录结构和必须的配置文件
+# 运行时数据通过容器内功能备份到对应的 backups/ 目录
+
+# 忽略 data/ 下所有文件
+stacks/*/data/**/*
+# 重新包含目录（必须！否则 git 跳过子树，后续 ! 规则全部无效）
+!stacks/*/data/**/
+
+# 保留 .gitkeep（维持目录结构）
+!stacks/*/data/**/.gitkeep
+
+# 必须保留的模板配置文件（.example）
+# 用户需复制为正式文件名后修改使用，git pull 不会覆盖本地配置
+!stacks/metacubex/data/mihomo/config.yaml.example
+!stacks/mosquitto/data/config/mosquitto.conf.example
+
+# ==================== 通用忽略 ====================
+# 离线备份
+backups/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~

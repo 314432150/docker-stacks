@@ -1,0 +1,7 @@
+# NAS Docker Stack 根入口
+#
+# 先启动 Dockge，再在 Web UI 中逐个导入 stacks/ 下的应用
+
+include:
+  - path: dockge/compose.yml
+    env_file: .env

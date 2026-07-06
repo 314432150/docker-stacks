@@ -1,0 +1,23 @@
+# ==================== 迅雷下载器 ====================
+services:
+  xunlei:
+    image: cnk3x/xunlei:beta
+    container_name: xunlei
+    restart: unless-stopped
+    hostname: nas
+
+    privileged: true  # 容器内挂载 /proc 等需要完整权限
+
+    network_mode: bridge
+
+    ports:
+      - 2345:2345/tcp  # Web 管理界面
+
+    environment:
+      XL_UID: ${NAS_PUID}
+      XL_GID: ${NAS_PGID}
+
+    volumes:
+      - ${DOWNLOAD_ROOT}:/xunlei/downloads                         # 下载目录
+      - ./data/data:/xunlei/data                                   # 运行数据
+      - ./data/cache:/xunlei/var/packages/pan-xunlei-com          # 缓存
