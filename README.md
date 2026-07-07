@@ -1,14 +1,13 @@
 # Docker Stacks
 
-NAS 上运行的 Docker Compose 服务编排仓库，通过 Dockge 可视化管理。
+NAS 上运行的 Docker Compose 服务编排仓库，通过 Portainer 可视化管理。
 
 ## 目录结构
 
 ```text
 docker-stacks/
-  compose.yml          # 根入口，仅启动 Dockge
+  compose.yml          # 根入口，仅启动 Portainer
   .env                 # 共用变量（唯一源文件）
-  dockge/              # Dockge 可视化管理
   stacks/              # 各应用 compose + 运行时数据
   scripts/             # 备份、恢复脚本
 ```
@@ -32,17 +31,17 @@ cd /opt/docker-stacks
 # 2. 修改 .env（NAS_IP、MEDIA_ROOT 等），所有 stack 通过 symlink 自动共享
 vim .env
 
-# 3. 启动 Dockge
+# 3. 启动 Portainer
 docker compose up -d
 
-# 4. 浏览器打开 http://<NAS_IP>:5001，导入 stacks/ 下的应用并启动
+# 4. 浏览器打开 https://<NAS_IP>:9443，创建管理员账户后导入 stacks/ 下的应用
 ```
 
 ## 入口说明
 
 | 方式 | 命令 | 适用场景 |
 |------|------|----------|
-| Dockge UI | `http://<NAS_IP>:5001` | **主要方式**：可视化管理所有 compose 栈 |
+| Portainer UI | `https://<NAS_IP>:9443` | **主要方式**：可视化管理所有 compose 栈、容器详情、网络、卷 |
 | 单应用 | `cd stacks/jellyfin && docker compose up -d` | 命令行调试单个服务 |
 
 > 修改根 `.env` 后所有 stack 自动生效（符号链接）。
