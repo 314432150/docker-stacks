@@ -4,7 +4,6 @@ services:
     image: portainer/portainer-ce:latest
     container_name: portainer
     restart: unless-stopped
-    user: "${NAS_PUID}:${NAS_PGID}"
     ports:
       - "9443:9443"
       - "8000:8000"
