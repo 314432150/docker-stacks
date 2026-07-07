@@ -6,8 +6,7 @@ NAS 上运行的 Docker Compose 服务编排仓库，通过飞牛 NAS (fnOS) 自
 
 ```text
 docker-stacks/
-  compose.yml          # 根入口说明
-  .env                 # 共用变量（唯一源文件）
+  global.env           # 共用变量（唯一源文件）
   stacks/              # 各应用 compose + 运行时数据
   scripts/             # 备份、恢复脚本
 ```
@@ -17,7 +16,7 @@ docker-stacks/
 ```text
 stacks/<应用名>/
   compose.yml
-  .env -> ../../.env   # 符号链接，指向根 .env，所有 stack 共享同一份
+  .env -> ../../global.env # 符号链接，指向根 global.env，所有 stack 共享同一份
   data/                # 运行时持久化数据
 ```
 
@@ -28,8 +27,8 @@ stacks/<应用名>/
 git clone https://github.com/314432150/docker-stacks.git /opt/docker-stacks
 cd /opt/docker-stacks
 
-# 2. 修改 .env（NAS_IP、MEDIA_ROOT 等），所有 stack 通过 symlink 自动共享
-vim .env
+# 2. 修改 global.env（NAS_IP、MEDIA_ROOT 等），所有 stack 通过 symlink 自动共享
+vim global.env
 
 # 3. 在飞牛 NAS Docker 管理界面中导入 stacks/ 下的 compose 文件并启动
 ```
@@ -41,7 +40,7 @@ vim .env
 | fnOS Docker | 飞牛 NAS 管理界面 | **主要方式**：可视化管理所有 compose 栈、容器详情 |
 | 命令行 | `cd stacks/jellyfin && docker compose up -d` | 命令行调试单个服务 |
 
-> 修改根 `.env` 后所有 stack 自动生效（符号链接）。
+> 修改根 `global.env` 后所有 stack 自动生效（符号链接）。
 
 
 
@@ -87,5 +86,5 @@ bash scripts/restore.sh backups/20250625-120000 jellyfin
 
 ## 仓库边界
 
-- **进 Git**：全部文件，包括 `.env`、`data/` 运行时数据、脚本、文档
+- **进 Git**：全部文件，包括 `global.env`、`data/` 运行时数据、脚本、文档
 - **不进 Git**：`backups/`（备份输出）
