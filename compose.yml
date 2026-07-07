@@ -1,7 +1,4 @@
 # NAS Docker Stack 根入口
 #
-# 先启动 Portainer，再导入 stacks/ 下的应用
-
-include:
-  - path: stacks/portainer/compose.yml
-    env_file: .env
+# 容器管理由飞牛 NAS (fnOS) 自带 Docker 工具接管
+# 各应用 compose 文件位于 stacks/ 目录，可直接在 fnOS 中导入
