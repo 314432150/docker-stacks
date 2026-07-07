@@ -3,7 +3,7 @@
 services:
   openclaw:
     # ghcr.1ms.run 为 ghcr.io 国内镜像，与项目其他栈保持一致
-    image: ghcr.1ms.run/openclaw/openclaw:latest
+    image: ghcr.1ms.run/openclaw/openclaw:latest-browser
     container_name: openclaw
     restart: unless-stopped
     user: "${NAS_PUID}:${NAS_PGID}"
