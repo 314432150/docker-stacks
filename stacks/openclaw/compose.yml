@@ -1,0 +1,43 @@
+# ==================== OpenClaw AI 代理网关 ====================
+# 官方 Docker 文档: https://docs.openclaw.ai/install/docker
+services:
+  openclaw:
+    # ghcr.1ms.run 为 ghcr.io 国内镜像，与项目其他栈保持一致
+    image: ghcr.1ms.run/openclaw/openclaw:latest
+    container_name: openclaw
+    restart: unless-stopped
+    user: "${NAS_PUID}:${NAS_PGID}"
+
+    # 网关 / 控制 UI 端口（首次访问需粘贴 .env 中的网关令牌）
+    ports:
+      - "18789:18789"
+
+    # 容器内通过 host.docker.internal 访问宿主机服务（Ollama / LM Studio / Mihomo 代理等）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    environment:
+      TZ: ${TZ}
+      # 网关监听范围: lan = 局域网可访问（适合 NAS 部署，宿主机浏览器可打开 UI）
+      OPENCLAW_GATEWAY_BIND: lan
+      # 容器内访问宿主代理（Mihomo mixed-port），如不需要可删除以下三行
+      HTTP_PROXY: ${PROXY_HTTP}
+      HTTPS_PROXY: ${PROXY_HTTP}
+      NO_PROXY: ${NO_PROXY}
+
+    volumes:
+      # 配置目录（openclaw.json / .env 网关令牌 / agents/ 认证信息）
+      - ./data/config:/home/node/.openclaw
+      # 鉴权密钥目录（与配置分离保存）
+      - ./data/auth:/home/node/.config/openclaw
+      # 让代理能访问并管理 NAS 媒体库与下载目录（按需调整权限）
+      - ${MEDIA_ROOT}:/media
+      - ${DOWNLOAD_ROOT}:/downloads
+
+    healthcheck:
+      # 镜像基于 node:24-slim，无 curl/wget，改用 node fetch 探测 /healthz
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:18789/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
