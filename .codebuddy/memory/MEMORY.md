@@ -39,3 +39,4 @@
 - 还原流程: 自动停止目标容器 → 解压 → 自动启动容器
 - 选择交互: 方向键/jk 移动，空格选中/取消，a 全选/取消全选
 - 权限问题: HA `.storage/` 和 mosquitto `.db` 属主非当前用户 → `sudo ds-backup` 即可解决（tar 以 root 运行）
+- 镜像迁移: `sudo ds-backup export-images` 导出所有 stack 镜像到 `images/` → 拷贝到新 NAS → `sudo ds-backup load-images` 加载
