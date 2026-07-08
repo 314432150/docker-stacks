@@ -9,12 +9,16 @@
 #   bash scripts/backup.sh backup -y        # 非交互一键备份全部推荐项
 #   bash scripts/backup.sh restore          # 进入交互式还原
 #   bash scripts/backup.sh jellyfin vaultwarden  # 向后兼容：快速备份指定应用
-#   bash scripts/backup.sh --install        # 注册为全局命令 ds-backup
+#   bash scripts/backup.sh --install        # 注册为全局命令 ds-backup（安装到 /usr/local/bin）
 #
 # 注册为全局命令后可在任意目录直接调用:
 #   ds-backup
 #   ds-backup backup -y
 #   ds-backup restore
+#
+# ⚠️ 推荐用 sudo 执行，确保备份还原时保留文件原始权限:
+#   sudo ds-backup backup -y
+#   sudo ds-backup restore
 #
 # 环境变量:
 #   BACKUP_ROOT   备份输出目录（默认: <仓库>/backups）
@@ -1145,52 +1149,27 @@ install_command() {
     echo -e "${BOLD}  安装 ${CMD_NAME} 全局命令${NC}"
     echo
 
-    # 优先级 1: /usr/local/bin（需要 sudo）
-    if [[ -d "/usr/local/bin" ]] && [[ -w "/usr/local/bin" ]]; then
-        link_path="/usr/local/bin/${CMD_NAME}"
-    elif [[ -d "/usr/local/bin" ]]; then
-        echo -e "  ${YELLOW}/usr/local/bin 需要 root 权限${NC}"
+    # 统一安装到 /usr/local/bin（sudo 也能找到）
+    if [[ -d "/usr/local/bin" ]]; then
         if command -v sudo &>/dev/null; then
-            echo -e "  ${DIM}正在使用 sudo 创建链接...${NC}"
-            sudo ln -sf "$target" "/usr/local/bin/${CMD_NAME}"
-            sudo chmod +x "/usr/local/bin/${CMD_NAME}"
-            echo
-            echo -e "  ${GREEN}✓${NC} 已安装: ${BOLD}/usr/local/bin/${CMD_NAME}${NC}"
-            echo
-            echo -e "  现在可在任意目录运行: ${BOLD}${CMD_NAME}${NC}"
-            return 0
+            echo -e "  ${DIM}使用 sudo 安装到 /usr/local/bin/${CMD_NAME} ...${NC}"
+            if sudo ln -sf "$target" "/usr/local/bin/${CMD_NAME}" 2>/dev/null && \
+               sudo chmod +x "/usr/local/bin/${CMD_NAME}" 2>/dev/null; then
+                echo
+                echo -e "  ${GREEN}✓${NC} 已安装: ${BOLD}/usr/local/bin/${CMD_NAME}${NC}"
+                echo
+                echo -e "  备份/还原请用: ${BOLD}sudo ${CMD_NAME} backup|restore${NC}"
+                return 0
+            else
+                echo -e "  ${RED}sudo 执行失败，请手动运行:${NC}"
+                echo -e "    ${BOLD}sudo ln -sf \"$target\" /usr/local/bin/${CMD_NAME}${NC}"
+            fi
         else
-            echo -e "  ${YELLOW}需要手动执行: sudo ln -sf \"$target\" /usr/local/bin/${CMD_NAME}${NC}"
+            echo -e "  ${YELLOW}未找到 sudo，请手动执行:${NC}"
+            echo -e "    ${BOLD}ln -sf \"$target\" /usr/local/bin/${CMD_NAME}${NC}"
         fi
-    fi
-
-    # 优先级 2: ~/.local/bin
-    local local_bin="${HOME}/.local/bin"
-    if [[ -d "$local_bin" ]]; then
-        link_path="${local_bin}/${CMD_NAME}"
-    elif mkdir -p "$local_bin" 2>/dev/null; then
-        link_path="${local_bin}/${CMD_NAME}"
-    fi
-
-    if [[ -n "$link_path" ]]; then
-        ln -sf "$target" "$link_path"
-        chmod +x "$link_path" 2>/dev/null || true
-        echo -e "  ${GREEN}✓${NC} 已安装: ${BOLD}${link_path}${NC}"
-
-        # 检查是否在 PATH 中
-        if ! echo "$PATH" | tr ':' '\n' | grep -qxF "$(dirname "$link_path")"; then
-            echo
-            echo -e "  ${YELLOW}⚠ $(dirname "$link_path") 不在 PATH 中${NC}"
-            echo -e "  ${DIM}请将以下行添加到 ~/.bashrc 或 ~/.zshrc:${NC}"
-            echo
-            echo -e "    ${BOLD}export PATH=\"$(dirname "$link_path"):\$PATH\"${NC}"
-            echo
-            echo -e "  ${DIM}然后执行: source ~/.bashrc${NC}"
-        else
-            echo
-            echo -e "  现在可在任意目录运行: ${BOLD}${CMD_NAME}${NC}"
-        fi
-        return 0
+    else
+        echo -e "  ${RED}/usr/local/bin 目录不存在${NC}"
     fi
 
     # 兜底
@@ -1229,6 +1208,16 @@ uninstall_command() {
 # 主入口
 # ──────────────────────────────────────────────
 main() {
+    # ── 权限检查：备份/还原需要 root，不然部分文件读不了 ──
+    local _arg1="${1:-}"
+    local _all_args="${*:-}"
+    if [[ $EUID -ne 0 ]] && [[ "$_arg1" != "--install" ]] && [[ "$_arg1" != "-i" ]] && \
+       [[ "$_arg1" != "--uninstall" ]] && [[ "$_arg1" != "--help" ]] && [[ "$_arg1" != "-h" ]]; then
+        echo -e "\n${RED}✗${NC} 备份/还原需 root 权限（部分文件属主非当前用户）"
+        echo -e "  ${BOLD}请用: sudo $(basename "$0") ${_all_args}${NC}\n"
+        exit 1
+    fi
+
     if [[ $# -eq 0 ]]; then
         # 无参数：交互式主菜单
         while true; do
