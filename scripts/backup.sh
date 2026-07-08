@@ -425,7 +425,6 @@ customize_app() {
 # ──────────────────────────────────────────────
 interactive_backup() {
     local auto_yes="${1:-0}"
-    git_auto_commit "备份"
 
     init_state
 
@@ -739,7 +738,6 @@ fi  # 结束 else（auto_yes 模式 vs TUI）
 # 交互式还原
 # ──────────────────────────────────────────────
 interactive_restore() {
-    git_auto_commit "还原"
     # 列出所有备份
     local backups=()
     if [[ -d "$BACKUP_ROOT" ]]; then
@@ -1087,7 +1085,6 @@ interactive_restore() {
 # 向后兼容：非交互快速备份
 # ──────────────────────────────────────────────
 legacy_backup() {
-    git_auto_commit "快速备份"
     local stamp
     stamp="$(date +%Y%m%d-%H%M%S)"
     local dest="${BACKUP_ROOT}/${stamp}"
@@ -1134,34 +1131,6 @@ legacy_backup() {
 # ──────────────────────────────────────────────
 # 清理状态
 # ──────────────────────────────────────────────
-# ──────────────────────────────────────────────
-# 自动 git commit（在关键操作前保存当前代码状态）
-# ──────────────────────────────────────────────
-git_auto_commit() {
-    local operation="${1:-操作}"
-    # 确保在仓库根目录
-    cd "${ROOT}"
-    # 非 git 仓库或无 git 命令，静默跳过
-    if ! command -v git &>/dev/null || ! git rev-parse --git-dir &>/dev/null 2>&1; then
-        return 0
-    fi
-    # 无变更，跳过
-    if [[ -z "$(git status --porcelain 2>/dev/null)" ]]; then
-        return 0
-    fi
-    echo -e "\n${BLUE}  ⟳${NC} 自动提交代码变更（${DIM}${operation}前${NC}）..."
-    git add -A --ignore-errors 2>/dev/null || true
-    if git commit -m "auto: checkpoint before ${operation} ($(date '+%Y-%m-%d %H:%M'))" &>/dev/null; then
-        local short_hash
-        short_hash="$(git rev-parse --short HEAD)"
-        local changed
-        changed="$(git diff --stat HEAD~1 2>/dev/null | tail -1 | xargs)"
-        echo -e "  ${GREEN}✓${NC} ${short_hash} ${DIM}${changed}${NC}"
-    else
-        echo -e "  ${DIM}(无变更)${NC}"
-    fi
-}
-
 cleanup() {
     rm -rf "${ROOT}/.cache/backup-tool"
 }
