@@ -829,14 +829,12 @@ interactive_restore() {
         return
     fi
 
-    # 选择要还原的应用
+    # 选择要还原的应用（TUI：方向键+空格，与备份交互一致）
     local restore_selected=()
     while true; do
-        printf '\033[H\033[J'
-        header "📥 还原 — $(basename "$selected_backup")"
-
-        for i in "${!backup_apps[@]}"; do
-            local name="${backup_apps[$i]}"
+        # ── TUI 渲染辅助 ──
+        _rline() {
+            local i="$1" name="$2" is_cursor="$3"
             local checked=false
             for s in "${restore_selected[@]}"; do
                 [[ "$s" == "$name" ]] && checked=true && break
@@ -847,8 +845,6 @@ interactive_restore() {
             else
                 marker="${DIM}·${NC}"
             fi
-
-            # 统计该应用的归档数
             local ac=0
             for f in "${selected_backup}"/*.tar.gz; do
                 [[ -f "$f" ]] || continue
@@ -856,55 +852,130 @@ interactive_restore() {
                 fn="$(basename "$f" .tar.gz)"
                 [[ "${fn%%_*}" == "$name" ]] && ((ac++)) || true
             done
+            if [[ $is_cursor -eq 1 ]]; then
+                printf "  ${YELLOW}▸${NC} %b ${BOLD}${WHITE}%-16s${NC} ${DIM}%d 个归档${NC}\n" \
+                    "$marker" "$name" "$ac"
+            else
+                printf "    %b ${BOLD}%-16s${NC} ${DIM}%d 个归档${NC}\n" \
+                    "$marker" "$name" "$ac"
+            fi
+        }
+        _upd_line() {
+            local i="$1"
+            local name="${backup_apps[$i]}"
+            local is_cur=0
+            [[ $i -eq $cursor ]] && is_cur=1
+            printf '\033[%d;0H\033[K' $((5 + i))
+            _rline "$i" "$name" "$is_cur"
+        }
+        _upd_summary() {
+            local n=${#backup_apps[@]}
+            printf '\033[%d;0H\033[J' $((5 + n))
+            echo
+            echo -e "  已选 ${GREEN}${#restore_selected[@]}${NC} 个应用"
+            echo
+            echo -e "  ${DIM}[↑↓/jk] 移动  [空格] 勾选/取消  [a] 全选/取消全选${NC}"
+            echo -e "  ${DIM}[r/Enter] 开始还原  [q] 退出${NC}"
+            printf '\033[?25l'
+        }
+        _toggle_app() {
+            local name="$1"
+            local new_selected=()
+            local found=false
+            for s in "${restore_selected[@]}"; do
+                if [[ "$s" == "$name" ]]; then
+                    found=true
+                else
+                    new_selected+=("$s")
+                fi
+            done
+            if ! $found; then
+                new_selected+=("$name")
+            fi
+            restore_selected=("${new_selected[@]}")
+        }
 
-            printf "  [%d] %b ${BOLD}%-16s${NC} ${DIM}%d 个归档${NC}\n" \
-                "$((i+1))" "$marker" "$name" "$ac"
+        local cursor=0
+
+        # 首次全量绘制
+        printf '\033[H\033[J'
+        printf '\033[?25l'
+        header "📥 还原 — $(basename "$selected_backup")"
+        for i in "${!backup_apps[@]}"; do
+            local is_first=0
+            [[ $i -eq 0 ]] && is_first=1
+            _rline "$i" "${backup_apps[$i]}" "$is_first"
+        done
+        _upd_summary
+
+        while true; do
+            local key
+            IFS= read -rsn1 key
+            if [[ $key == $'\033' ]]; then
+                local extra
+                read -rsn2 -t 0.01 extra 2>/dev/null || true
+                key+="$extra"
+            fi
+
+            case "$key" in
+                q|Q)
+                    printf '\033[?25h'
+                    local n=${#backup_apps[@]}
+                    printf '\033[%d;0H\033[J' $((5 + n + 5))
+                    return
+                    ;;
+                $'\033[A'|k|K)
+                    if [[ $cursor -gt 0 ]]; then
+                        local prev=$cursor
+                        cursor=$((cursor - 1))
+                        _upd_line "$prev"
+                        _upd_line "$cursor"
+                        printf '\033[%d;0H\033[?25l' $((5 + cursor))
+                    fi
+                    ;;
+                $'\033[B'|j|J)
+                    local max=$(( ${#backup_apps[@]} - 1 ))
+                    if [[ $cursor -lt $max ]]; then
+                        local prev=$cursor
+                        cursor=$((cursor + 1))
+                        _upd_line "$prev"
+                        _upd_line "$cursor"
+                        printf '\033[%d;0H\033[?25l' $((5 + cursor))
+                    fi
+                    ;;
+                ' ')
+                    _toggle_app "${backup_apps[$cursor]}"
+                    _upd_line "$cursor"
+                    _upd_summary
+                    printf '\033[%d;0H\033[?25l' $((5 + cursor))
+                    ;;
+                a|A)
+                    if [[ ${#restore_selected[@]} -eq 0 ]]; then
+                        restore_selected=("${backup_apps[@]}")
+                    else
+                        restore_selected=()
+                    fi
+                    for i in "${!backup_apps[@]}"; do
+                        _upd_line "$i"
+                    done
+                    _upd_summary
+                    ;;
+                ''|$'\r'|$'\n'|r|R)
+                    printf '\033[?25h'
+                    printf '\033[%d;0H\033[J' $((5 + ${#backup_apps[@]} + 5))
+                    break
+                    ;;
+                *)  ;;
+            esac
         done
 
-        echo
-        echo -e "  已选 ${GREEN}${#restore_selected[@]}${NC} 个应用"
-        echo
-        echo -e "  ${DIM}命令: [数字]切换  [a]全选  [n]全不选  [r]开始还原  [q]返回${NC}"
-        read -r -p "  > " cmd
-
-        case "$cmd" in
-            q|Q) return ;;
-            r|R)
-                [[ ${#restore_selected[@]} -eq 0 ]] && {
-                    echo -e "\n${YELLOW}  未选择任何应用${NC}"
-                    press_enter
-                    continue
-                }
-                break
-                ;;
-            a|A)
-                restore_selected=("${backup_apps[@]}")
-                ;;
-            n|N)
-                restore_selected=()
-                ;;
-            *)
-                if [[ "$cmd" =~ ^[0-9]+$ ]]; then
-                    local idx=$((cmd - 1))
-                    if [[ $idx -ge 0 ]] && [[ $idx -lt ${#backup_apps[@]} ]]; then
-                        local name="${backup_apps[$idx]}"
-                        local found=false
-                        local new_selected=()
-                        for s in "${restore_selected[@]}"; do
-                            if [[ "$s" == "$name" ]]; then
-                                found=true
-                            else
-                                new_selected+=("$s")
-                            fi
-                        done
-                        if ! $found; then
-                            new_selected+=("$name")
-                        fi
-                        restore_selected=("${new_selected[@]}")
-                    fi
-                fi
-                ;;
-        esac
+        # 未选择时重新进入 TUI
+        if [[ ${#restore_selected[@]} -eq 0 ]]; then
+            echo -e "${YELLOW}  未选择任何应用${NC}"
+            press_enter
+            continue
+        fi
+        break
     done
 
     # 确认还原
@@ -923,13 +994,43 @@ interactive_restore() {
     done
 
     echo
-    if ! confirm "确认还原? 这将覆盖现有文件!"; then
+    if ! confirm "确认还原? 这将覆盖现有文件!" "Y"; then
         echo -e "\n${YELLOW}  已取消${NC}"
         return
     fi
 
+    # ── 还原前：停止受影响的容器 ──
+    local has_compose=false
+    command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1 && has_compose=true
+
+    local stopped_apps=()
+    if $has_compose; then
+        echo
+        section "停止容器"
+        for name in "${restore_selected[@]}"; do
+            local compose_dir
+            if [[ "$name" == "dockge" ]]; then
+                compose_dir="${ROOT}/dockge"
+            else
+                compose_dir="${ROOT}/stacks/${name}"
+            fi
+            if [[ -f "${compose_dir}/compose.yml" ]]; then
+                printf "  ${BLUE}→${NC} 停止 ${BOLD}${name}${NC} ... "
+                if (cd "$compose_dir" && docker compose down 2>/dev/null); then
+                    echo -e "${GREEN}✓${NC}"
+                    stopped_apps+=("$name")
+                else
+                    echo -e "${YELLOW}⚠ 可能未运行${NC}"
+                fi
+            fi
+        done
+    else
+        echo -e "\n  ${YELLOW}⚠ docker compose 不可用，跳过容器管理${NC}"
+    fi
+
     # 执行还原
-    echo -e "\n  ${BLUE}⏳${NC} 正在还原...\n"
+    echo
+    section "解压备份"
     local success=0 fail=0
 
     for name in "${restore_selected[@]}"; do
@@ -951,8 +1052,29 @@ interactive_restore() {
     done
 
     echo
-    echo -e "  ${BOLD}完成${NC}: 成功 ${GREEN}${success}${NC}, 失败 ${RED}${fail}${NC}"
-    echo -e "  ${DIM}还原后请在对应目录运行 docker compose up -d 启动服务${NC}"
+    echo -e "  ${BOLD}解压完成${NC}: 成功 ${GREEN}${success}${NC}, 失败 ${RED}${fail}${NC}"
+
+    # ── 还原后：重新启动容器 ──
+    if $has_compose && [[ ${#stopped_apps[@]} -gt 0 ]]; then
+        echo
+        section "启动容器"
+        for name in "${stopped_apps[@]}"; do
+            local compose_dir
+            if [[ "$name" == "dockge" ]]; then
+                compose_dir="${ROOT}/dockge"
+            else
+                compose_dir="${ROOT}/stacks/${name}"
+            fi
+            printf "  ${BLUE}→${NC} 启动 ${BOLD}${name}${NC} ... "
+            if (cd "$compose_dir" && docker compose up -d 2>/dev/null); then
+                echo -e "${GREEN}✓${NC}"
+            else
+                echo -e "${RED}✗${NC}"
+            fi
+        done
+    else
+        echo -e "  ${DIM}容器未停止或 compose 不可用，请手动启动服务${NC}"
+    fi
 }
 
 # ──────────────────────────────────────────────

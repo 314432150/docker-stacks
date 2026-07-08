@@ -4,7 +4,7 @@ services:
     image: ghcr.1ms.run/home-assistant/home-assistant:latest
     container_name: homeassistant
     restart: unless-stopped
-    user: "${NAS_PUID}:${NAS_PGID}"
+    # 不使用 user: 指令——HA 容器内部自行管理权限，s6 初始化阶段需要 root
 
     # host 模式让 HA 自动发现局域网设备
     network_mode: host
@@ -19,6 +19,9 @@ services:
 
     environment:
       TZ: ${TZ}
+      HTTP_PROXY: ${PROXY_HOST}
+      HTTPS_PROXY: ${PROXY_HOST}
+      NO_PROXY: ${NO_PROXY}
 
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8123/ || exit 1"]
