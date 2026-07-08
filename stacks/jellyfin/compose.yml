@@ -20,8 +20,8 @@ services:
 
     environment:
       JELLYFIN_PublishedServerUrl: http://${NAS_IP}:8096  # 客户端远程访问地址
-      HTTP_PROXY: ${PROXY_HTTP}
-      HTTPS_PROXY: ${PROXY_HTTP}
+      HTTP_PROXY: ${PROXY_HOST}
+      HTTPS_PROXY: ${PROXY_HOST}
       NO_PROXY: ${NO_PROXY}
       TZ: ${TZ}
 

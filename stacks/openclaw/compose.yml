@@ -26,6 +26,10 @@ services:
     security_opt:
       - no-new-privileges:true
 
+    # 仅注入网关令牌（data/config/.env，已 gitignore）；不含宿主机路径，不触发 #77436 泄漏
+    env_file:
+      - ./data/config/.env
+
     environment:
       # 固定容器内路径，避免宿主 .env 中的宿主机路径泄漏进容器运行时（官方 #77436）
       HOME: /home/node
@@ -38,9 +42,9 @@ services:
       TZ: ${TZ}
       # 网关监听范围: lan = 局域网可访问（适合 NAS 部署，宿主机浏览器可打开 UI）
       OPENCLAW_GATEWAY_BIND: lan
-      # 容器内访问宿主代理（Mihomo mixed-port），如不需要可删除以下三行
-      HTTP_PROXY: ${PROXY_HTTP}
-      HTTPS_PROXY: ${PROXY_HTTP}
+      # 容器内访问宿主代理（Mihomo mixed-port），bridge 模式通过 host.docker.internal
+      HTTP_PROXY: ${PROXY_BRIDGE}
+      HTTPS_PROXY: ${PROXY_BRIDGE}
       NO_PROXY: ${NO_PROXY}
 
     volumes:
