@@ -16,8 +16,7 @@ stacks/*/data/**/*
 !stacks/mosquitto/data/config/mosquitto.conf.example
 
 # ==================== 通用忽略 ====================
-# 环境变量（模板 → 本地配置）
-global.env
+
 
 # 离线备份 — 只跟踪目录本身，不跟踪备份内容
 backups/*

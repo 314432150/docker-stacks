@@ -6,7 +6,7 @@ NAS 上运行的 Docker Compose 服务编排仓库，部署在 `/srv/docker-stac
 
 ```text
 docker-stacks/
-├── global.env.example       # 环境变量模板，部署时复制为 global.env 修改
+├── global.env               # 全局环境变量，所有 stack 的 .env 通过符号链接指向此文件
 ├── scripts/
 │   └── backup.sh            # 备份/恢复交互式脚本，可注册为全局命令 ds-backup
 ├── backups/                 # 备份输出目录，不进 Git
@@ -58,8 +58,7 @@ sudo install -d -o $USER -g $(id -gn) /srv
 git clone https://github.com/314432150/docker-stacks.git /srv/docker-stacks
 cd /srv/docker-stacks
 
-# 2. 复制环境变量模板并修改
-cp global.env.example global.env
+# 2. 修改环境变量（按需调整 NAS_IP、存储路径等）
 vim global.env
 
 # 3. 安装备份脚本为全局命令
@@ -102,8 +101,6 @@ sudo ds-backup backup -y
 # 直接进入还原模式
 sudo ds-backup restore
 
-# 指定备份路径
-sudo BACKUP_ROOT=/mnt/nas-backup ds-backup
 ```
 
 
@@ -113,19 +110,5 @@ sudo BACKUP_ROOT=/mnt/nas-backup ds-backup
 - 解析 `compose.yml` 卷挂载，智能区分 配置数据 / 缓存 / 外部挂载
 - 每个应用预选推荐备份项（跳过缓存目录），可自由勾选
 - 还原时列出所有历史备份，自由选择要还原的应用
-- 备份格式：`{应用}_{目录}.tar.gz` 存入按时间戳命名的文件夹
+- 备份格式：`{时间戳}_{描述}_{应用列表}.tar.gz`，如 `20260710-045320_test_homeassistant_jellyfin_...tar.gz`
 
-### 命令行快速备份（向后兼容）
-
-```bash
-# 备份指定应用
-bash scripts/backup.sh jellyfin vaultwarden
-
-# 恢复指定应用
-bash scripts/restore.sh backups/20250625-120000 jellyfin
-```
-
-## 仓库边界
-
-- **进 Git**：模板文件（`global.env.example`、`*.example`）、脚本、文档、目录结构
-- **不进 Git**：`backups/`（备份输出）
