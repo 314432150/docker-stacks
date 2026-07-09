@@ -16,8 +16,9 @@ stacks/*/data/**/*
 !stacks/mosquitto/data/config/mosquitto.conf.example
 
 # ==================== 通用忽略 ====================
-# 离线备份
-backups/
+# 离线备份 — 只跟踪目录本身，不跟踪备份内容
+backups/*
+!backups/.gitkeep
 
 # openclaw 内嵌 workspace（含自己的 .git 仓库，不应被外层仓库管理）
 stacks/openclaw/data/config/workspace/
