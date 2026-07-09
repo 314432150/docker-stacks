@@ -8,7 +8,6 @@
 #   bash scripts/backup.sh backup           # 进入交互式备份
 #   bash scripts/backup.sh backup -y        # 非交互一键备份全部推荐项
 #   bash scripts/backup.sh restore          # 进入交互式还原
-#   bash scripts/backup.sh jellyfin vaultwarden  # 向后兼容：快速备份指定应用
 #   bash scripts/backup.sh --install        # 注册为全局命令 ds-backup（安装到 /usr/local/bin）
 #
 # 注册为全局命令后可在任意目录直接调用:
@@ -654,10 +653,29 @@ fi  # 结束 else（auto_yes 模式 vs TUI）
     echo -e "  共 ${BOLD}${total_dirs}${NC} 个目录"
     echo
 
+    # 收集选中的应用名（用于文件名）
+    local selected_apps=()
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
+        local sf="$(state_file "${name}")"
+        if [[ -f "$sf" ]] && [[ -s "$sf" ]]; then
+            selected_apps+=("$name")
+        fi
+    done < <(discover_apps)
+    local app_suffix=""
+    if [[ ${#selected_apps[@]} -gt 0 ]]; then
+        # 最多取前 6 个应用名，超出用 _Nmore 表示
+        if [[ ${#selected_apps[@]} -le 6 ]]; then
+            app_suffix="_$(printf '%s_' "${selected_apps[@]}" | sed 's/_$//')"
+        else
+            app_suffix="_$(printf '%s_' "${selected_apps[@]:0:6}" | sed 's/_$//')_$(( ${#selected_apps[@]} - 6 ))more"
+        fi
+    fi
+
     # 备份目标
     local stamp
     stamp="$(date +%Y%m%d-%H%M%S)"
-    local default_dest="${BACKUP_ROOT}/${stamp}"
+    local default_dest="${BACKUP_ROOT}/${stamp}${app_suffix}"
 
     # 可选标签
     local label=""
@@ -673,27 +691,30 @@ fi  # 结束 else（auto_yes 模式 vs TUI）
     fi
 
     if [[ -n "$label" ]]; then
-        default_dest="${BACKUP_ROOT}/${stamp}_${label}"
+        default_dest="${BACKUP_ROOT}/${stamp}_${label}${app_suffix}"
     fi
 
     local dest
     if [[ "$auto_yes" == "1" ]]; then
         dest="${default_dest}"
     else
-        echo -en "  备份目标目录 [${DIM}${default_dest}${NC}]: "
+        echo -en "  备份文件名 [${DIM}${default_dest}.tar.gz${NC}]: "
         read -r dest_input
         dest="${dest_input:-${default_dest}}"
     fi
+    # 去掉用户可能输入的 .tar.gz 后缀，后面统一添加
+    dest="${dest%.tar.gz}"
 
     if [[ "$auto_yes" != "1" ]]; then
         confirm "确认开始备份?" "Y" || { echo -e "\n${YELLOW}  已取消${NC}"; return; }
     fi
 
-    # 执行备份
-    echo -e "\n  正在备份到 ${CYAN}${dest}${NC} ...\n"
-    mkdir -p "$dest"
+    # 执行备份 — 创建单个 tar.gz 归档
+    local archive="${dest}.tar.gz"
+    echo -e "\n  正在备份到 ${CYAN}${archive}${NC} ...\n"
 
-    local success=0 fail=0
+    local backup_paths=()
+    local skip_count=0
     while IFS= read -r name; do
         [[ -n "$name" ]] || continue
         while IFS= read -r drel; do
@@ -708,30 +729,68 @@ fi  # 结束 else（auto_yes 模式 vs TUI）
             local src="${ROOT}/${app_rel}/${drel}"
             if [[ ! -d "$src" ]]; then
                 echo -e "  ${RED}✗${NC} [${name}] ${drel} — 目录不存在，跳过"
-                ((fail++)) || true
+                ((skip_count++)) || true
                 continue
             fi
-
-            local sub_name
-            sub_name="$(echo "$drel" | tr '/' '_')"
-            local archive="${dest}/${name}_${sub_name}.tar.gz"
-
-            printf "  ${BLUE}⏳${NC} 正在打包 ${BOLD}%s${NC}/${CYAN}%-40s${NC} ... " "$name" "$drel"
-            if tar -czf "$archive" -C "$ROOT" "${app_rel}/${drel}" 2>/dev/null; then
-                local size
-                size=$(du -h "$archive" 2>/dev/null | cut -f1)
-                echo -e "${GREEN}✓${NC} ${size}"
-                ((success++)) || true
-            else
-                echo -e "${RED}✗${NC} 失败"
-                ((fail++)) || true
-            fi
+            backup_paths+=("${app_rel}/${drel}")
+            printf "  ${GREEN}✓${NC} ${CYAN}%-16s${NC} %s\n" "$name" "$drel"
         done < <(get_selected_dirs "$name")
     done < <(discover_apps)
 
+    if [[ ${#backup_paths[@]} -eq 0 ]]; then
+        echo
+        echo -e "  ${YELLOW}没有可备份的目录${NC}"
+        return
+    fi
+
     echo
-    echo -e "  ${BOLD}完成${NC}: 成功 ${GREEN}${success}${NC}, 失败 ${RED}${fail}${NC}"
-    echo -e "  备份位置: ${CYAN}${dest}${NC}"
+    printf "  ${BLUE}⏳${NC} 正在打包 ${BOLD}%d${NC} 个目录 ... " "${#backup_paths[@]}"
+    if tar -czf "$archive" -C "$ROOT" "${backup_paths[@]}" 2>/dev/null; then
+        local size
+        size=$(du -h "$archive" 2>/dev/null | cut -f1)
+        echo -e "${GREEN}✓${NC} ${size}"
+        local success=${#backup_paths[@]} fail=$skip_count
+    else
+        echo -e "${RED}✗${NC} 打包失败"
+        local success=0 fail=${#backup_paths[@]}
+    fi
+
+    echo
+    echo -e "  ${BOLD}完成${NC}: 成功 ${GREEN}${success}${NC}, 跳过 ${YELLOW}${fail}${NC}"
+    echo -e "  备份位置: ${CYAN}${archive}${NC}"
+}
+
+# ──────────────────────────────────────────────
+# 备份内容解析
+# ──────────────────────────────────────────────
+
+# 从备份中列出应用名（去重）
+list_apps_in_backup() {
+    local bp="$1"
+    if [[ -n "${_TAR_CACHE:-}" ]]; then
+        echo "$_TAR_CACHE" | grep -oP '(?:stacks|dockge)/[^/]+' | sed 's|^stacks/||' | sort -u || true
+    else
+        tar -tzf "$bp" 2>/dev/null | grep -oP '(?:stacks|dockge)/[^/]+' | sed 's|^stacks/||' | sort -u || true
+    fi
+}
+
+# 获取备份大小（MB）
+backup_size_mb() {
+    local bp="$1"
+    local total_size
+    total_size=$(stat -c%s "$bp" 2>/dev/null || stat -f%z "$bp" 2>/dev/null || echo 0)
+    echo "scale=1; $total_size / 1048576" | bc 2>/dev/null || echo "?"
+}
+
+# 从归档中获取某应用的路径列表
+# 输出: "stacks/app/data" 每行一个（相对于 ROOT）
+app_archive_paths() {
+    local bp="$1" app="$2"
+    if [[ -n "${_TAR_CACHE:-}" ]]; then
+        echo "$_TAR_CACHE" | grep "^stacks/${app}/" | grep -o "stacks/${app}/[^/]\+" | sort -u || true
+    else
+        tar -tzf "$bp" 2>/dev/null | grep "^stacks/${app}/" | grep -o "stacks/${app}/[^/]\+" | sort -u || true
+    fi
 }
 
 # ──────────────────────────────────────────────
@@ -741,14 +800,34 @@ interactive_restore() {
     # 列出所有备份
     local backups=()
     if [[ -d "$BACKUP_ROOT" ]]; then
-        while IFS= read -r -d '' d; do
-            backups+=("$(basename "$d")")
-        done < <(find "$BACKUP_ROOT" -maxdepth 1 -mindepth 1 -type d -print0 2>/dev/null | sort -rz)
+        while IFS= read -r -d '' f; do
+            local bname
+            bname="$(basename "$f")"
+            # 跳过 migration 安全备份
+            [[ "$bname" == pre_restore_* ]] && continue
+            backups+=("$bname")
+        done < <(find "$BACKUP_ROOT" -maxdepth 1 -mindepth 1 -name '*.tar.gz' -print0 2>/dev/null | sort -rz)
     fi
 
     if [[ ${#backups[@]} -eq 0 ]]; then
-        echo -e "\n${YELLOW}  没有找到任何备份${NC}"
-        echo -e "  备份目录: ${CYAN}${BACKUP_ROOT}${NC}"
+        echo -e "\n${YELLOW}  备份目录为空${NC}"
+        echo -e "  路径: ${CYAN}${BACKUP_ROOT}${NC}"
+        echo
+        echo -e "  ${BOLD}📋 NAS 迁移 — 导入备份文件${NC}"
+        echo
+        echo -e "  请先将旧 NAS 上的备份文件复制到当前服务器:"
+        echo
+        echo -e "  ${DIM}方式1 — rsync 直接拉取 (推荐):${NC}"
+        echo -e "    ${BOLD}rsync -avP 旧NAS用户名@旧NAS_IP:${ROOT}/backups/ ${BACKUP_ROOT}/${NC}"
+        echo
+        echo -e "  ${DIM}方式2 — scp 手动复制:${NC}"
+        echo -e "    ${BOLD}scp -r 旧NAS用户名@旧NAS_IP:${ROOT}/backups/* ${BACKUP_ROOT}/${NC}"
+        echo
+        echo -e "  ${DIM}方式3 — 外接存储 / SMB 挂载:${NC}"
+        echo -e "    ${BOLD}cp -r /mnt/usb/backups/* ${BACKUP_ROOT}/${NC}"
+        echo
+        echo -e "  ${DIM}完成后重新运行: sudo ds-backup restore${NC}"
+        echo
         press_enter
         return
     fi
@@ -765,30 +844,12 @@ interactive_restore() {
             local bpath="${BACKUP_ROOT}/${b}"
 
             # 计算大小
-            local total_size=0
-            for f in "${bpath}"/*.tar.gz; do
-                [[ -f "$f" ]] || continue
-                total_size=$((total_size + $(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null || echo 0)))
-            done
             local size_mb
-            size_mb="$(echo "scale=1; $total_size / 1048576" | bc 2>/dev/null || echo "?")"
+            size_mb="$(backup_size_mb "$bpath")"
 
             # 解析内容
-            local apps=""
-            for f in "${bpath}"/*.tar.gz; do
-                [[ -f "$f" ]] || continue
-                local fn
-                fn="$(basename "$f" .tar.gz)"
-                # 提取应用名
-                local aname="${fn%%_*}"
-                # 检查是否已知应用
-                if [[ -d "${ROOT}/stacks/${aname}" ]] || [[ "$aname" == "dockge" ]]; then
-                    if [[ "$apps" != *"$aname"* ]]; then
-                        apps="${apps}${aname}, "
-                    fi
-                fi
-            done
-            apps="${apps%, }"
+            local apps
+            apps="$(list_apps_in_backup "$bpath" | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
             [[ -z "$apps" ]] && apps="${DIM}(空)${NC}"
 
             printf "  [%d] ${BOLD}%s${NC}  ${DIM}%s MB${NC}\n" "$((i+1))" "$b" "$size_mb"
@@ -810,22 +871,17 @@ interactive_restore() {
         fi
     done
 
+    # 缓存 tar 列表，避免 TUI 渲染时反复读取大文件
+    _TAR_CACHE=$(tar -tzf "$selected_backup" 2>/dev/null || true)
+
     # 解析备份中的应用
     local backup_apps=()
-    for f in "${selected_backup}"/*.tar.gz; do
-        [[ -f "$f" ]] || continue
-        local fn
-        fn="$(basename "$f" .tar.gz)"
-        local aname="${fn%%_*}"
+    while IFS= read -r aname; do
+        [[ -n "$aname" ]] || continue
         if [[ -d "${ROOT}/stacks/${aname}" ]] || [[ "$aname" == "dockge" ]]; then
-            # 去重
-            local found=false
-            for existing in "${backup_apps[@]}"; do
-                [[ "$existing" == "$aname" ]] && found=true && break
-            done
-            $found || backup_apps+=("$aname")
+            backup_apps+=("$aname")
         fi
-    done
+    done < <(list_apps_in_backup "$selected_backup")
 
     if [[ ${#backup_apps[@]} -eq 0 ]]; then
         echo -e "\n${YELLOW}  备份中没有可还原的应用${NC}"
@@ -834,7 +890,13 @@ interactive_restore() {
     fi
 
     # 选择要还原的应用（TUI：方向键+空格，与备份交互一致）
-    local restore_selected=()
+    local app_archive_counts=()
+    for name in "${backup_apps[@]}"; do
+        local ac
+        ac=$(echo "$_TAR_CACHE" | grep "^stacks/${name}/" | grep -o "stacks/${name}/[^/]\+" | sort -u | wc -l)
+        app_archive_counts+=("$ac")
+    done
+    local restore_selected=("${backup_apps[@]}")
     while true; do
         # ── TUI 渲染辅助 ──
         _rline() {
@@ -849,13 +911,7 @@ interactive_restore() {
             else
                 marker="${DIM}·${NC}"
             fi
-            local ac=0
-            for f in "${selected_backup}"/*.tar.gz; do
-                [[ -f "$f" ]] || continue
-                local fn
-                fn="$(basename "$f" .tar.gz)"
-                [[ "${fn%%_*}" == "$name" ]] && ((ac++)) || true
-            done
+            local ac="${app_archive_counts[$i]}"
             if [[ $is_cursor -eq 1 ]]; then
                 printf "  ${YELLOW}▸${NC} %b ${BOLD}${WHITE}%-16s${NC} ${DIM}%d 个归档${NC}\n" \
                     "$marker" "$name" "$ac"
@@ -988,19 +1044,71 @@ interactive_restore() {
 
     for name in "${restore_selected[@]}"; do
         echo -e "  ${CYAN}${name}${NC}"
-        for f in "${selected_backup}"/*.tar.gz; do
-            [[ -f "$f" ]] || continue
-            local fn
-            fn="$(basename "$f")"
-            [[ "$(echo "$fn" | cut -d_ -f1)" == "$name" ]] || continue
-            echo -e "    ${DIM}${fn}${NC}"
-        done
+        while IFS= read -r p; do
+            [[ -n "$p" ]] && echo -e "    ${DIM}${p}${NC}"
+        done < <(app_archive_paths "$selected_backup" "$name")
     done
 
     echo
     if ! confirm "确认还原? 这将覆盖现有文件!" "Y"; then
         echo -e "\n${YELLOW}  已取消${NC}"
         return
+    fi
+
+    # ── 还原前：迁移安全备份（目标目录已有内容时先备份，防止还原失败无法回滚）──
+    local migration_backup_dir=""
+    local has_existing=0
+
+    for name in "${restore_selected[@]}"; do
+        # 检查目标目录是否存在内容
+        local target_dir="${ROOT}/stacks/${name}"
+        [[ "$name" == "dockge" ]] && target_dir="${ROOT}/dockge"
+        if [[ -d "$target_dir" ]] && [[ -n "$(ls -A "$target_dir" 2>/dev/null)" ]]; then
+            has_existing=1
+            break
+        fi
+    done
+
+    if [[ $has_existing -eq 1 ]]; then
+        echo
+        section "迁移前安全备份"
+        echo -e "  ${YELLOW}⚠${NC} 检测到目标目录已有内容"
+        echo -e "  ${DIM}还原将覆盖现有文件，建议先创建安全备份以防万一${NC}"
+        echo
+        if confirm "创建迁移前安全备份?" "N"; then
+            local pre_stamp
+            pre_stamp="$(date +%Y%m%d-%H%M%S)"
+            migration_backup_dir="${BACKUP_ROOT}/pre_restore_${pre_stamp}"
+            mkdir -p "$migration_backup_dir"
+
+            local pre_ok=0 pre_fail=0
+            for name in "${restore_selected[@]}"; do
+                while IFS= read -r dir_path; do
+                        [[ -n "$dir_path" ]] || continue
+                        if [[ -d "${ROOT}/${dir_path}" ]] && \
+                           [[ -n "$(ls -A "${ROOT}/${dir_path}" 2>/dev/null)" ]]; then
+                            local safe_fn
+                            safe_fn="$(echo "$dir_path" | tr '/' '_')"
+                            local pre_archive="${migration_backup_dir}/${safe_fn}.tar.gz"
+                            printf "  ${BLUE}⏳${NC} 备份现有 ${CYAN}${dir_path}${NC} ... "
+                            if tar -czf "$pre_archive" -C "$ROOT" "${dir_path}" 2>/dev/null; then
+                                local pre_size
+                                pre_size=$(du -h "$pre_archive" 2>/dev/null | cut -f1)
+                                echo -e "${GREEN}✓${NC} ${pre_size}"
+                                ((pre_ok++)) || true
+                            else
+                                echo -e "${RED}✗${NC}"
+                                ((pre_fail++)) || true
+                            fi
+                        fi
+                    done < <(app_archive_paths "$selected_backup" "$name")
+            done
+            echo
+            echo -e "  安全备份: 成功 ${GREEN}${pre_ok}${NC}, 失败 ${RED}${pre_fail}${NC}"
+            echo -e "  位置: ${CYAN}${migration_backup_dir}${NC}"
+        else
+            echo -e "  ${DIM}已跳过安全备份${NC}"
+        fi
     fi
 
     # ── 还原前：停止受影响的容器 ──
@@ -1019,15 +1127,25 @@ interactive_restore() {
                 compose_dir="${ROOT}/stacks/${name}"
             fi
             if [[ -f "${compose_dir}/compose.yml" ]]; then
-                printf "  ${BLUE}→${NC} 停止 ${BOLD}${name}${NC} ... "
-                if (cd "$compose_dir" && docker compose down 2>/dev/null); then
-                    echo -e "${GREEN}✓${NC}"
-                    stopped_apps+=("$name")
+                # 检查是否有容器在运行
+                local running
+                running=$(cd "$compose_dir" && docker compose ps --status=running -q 2>/dev/null)
+                if [[ -n "$running" ]]; then
+                    printf "  ${BLUE}→${NC} 停止 ${BOLD}${name}${NC} ... "
+                    if (cd "$compose_dir" && docker compose down 2>/dev/null); then
+                        echo -e "${GREEN}✓${NC}"
+                        stopped_apps+=("$name")
+                    else
+                        echo -e "${RED}✗${NC}"
+                    fi
                 else
-                    echo -e "${YELLOW}⚠ 可能未运行${NC}"
+                    echo -e "  ${DIM}·${NC} ${name} ${DIM}(未运行，跳过)${NC}"
                 fi
             fi
         done
+        if [[ ${#stopped_apps[@]} -eq 0 ]]; then
+            echo -e "  ${DIM}没有运行中的容器需要停止${NC}"
+        fi
     else
         echo -e "\n  ${YELLOW}⚠ docker compose 不可用，跳过容器管理${NC}"
     fi
@@ -1038,94 +1156,53 @@ interactive_restore() {
     local success=0 fail=0
 
     for name in "${restore_selected[@]}"; do
-        for f in "${selected_backup}"/*.tar.gz; do
-            [[ -f "$f" ]] || continue
-            local fn
-            fn="$(basename "$f")"
-            [[ "$(echo "$fn" | cut -d_ -f1)" == "$name" ]] || continue
-
-            printf "  ${BLUE}⏳${NC} 正在解压 ${CYAN}%-45s${NC} ... " "$fn"
-            if tar -xzf "$f" -C "$ROOT" 2>/dev/null; then
-                echo -e "${GREEN}✓${NC}"
-                ((success++)) || true
-            else
-                echo -e "${RED}✗${NC}"
-                ((fail++)) || true
-            fi
-        done
+        local app_path="stacks/${name}"
+        [[ "$name" == "dockge" ]] && app_path="dockge"
+        printf "  ${BLUE}⏳${NC} 解压 ${BOLD}${name}${NC} ... "
+        if tar -xzf "$selected_backup" -C "$ROOT" "$app_path" 2>/dev/null; then
+            echo -e "${GREEN}✓${NC}"
+            ((success++)) || true
+        else
+            echo -e "${RED}✗${NC}"
+            ((fail++)) || true
+        fi
     done
 
     echo
     echo -e "  ${BOLD}解压完成${NC}: 成功 ${GREEN}${success}${NC}, 失败 ${RED}${fail}${NC}"
 
     # ── 还原后：重新启动容器 ──
-    if $has_compose && [[ ${#stopped_apps[@]} -gt 0 ]]; then
+    if $has_compose; then
         echo
         section "启动容器"
-        for name in "${stopped_apps[@]}"; do
+        for name in "${restore_selected[@]}"; do
             local compose_dir
             if [[ "$name" == "dockge" ]]; then
                 compose_dir="${ROOT}/dockge"
             else
                 compose_dir="${ROOT}/stacks/${name}"
             fi
+            if [[ ! -f "${compose_dir}/compose.yml" ]]; then
+                echo -e "  ${DIM}·${NC} ${name} ${DIM}(无 compose.yml，跳过)${NC}"
+                continue
+            fi
             printf "  ${BLUE}→${NC} 启动 ${BOLD}${name}${NC} ... "
-            if (cd "$compose_dir" && docker compose up -d 2>/dev/null); then
+            if timeout 60 docker compose -f "${compose_dir}/compose.yml" up -d 2>/dev/null; then
                 echo -e "${GREEN}✓${NC}"
             else
                 echo -e "${RED}✗${NC}"
             fi
         done
     else
-        echo -e "  ${DIM}容器未停止或 compose 不可用，请手动启动服务${NC}"
+        echo -e "  ${DIM}compose 不可用，请手动启动服务${NC}"
     fi
-}
 
-# ──────────────────────────────────────────────
-# 向后兼容：非交互快速备份
-# ──────────────────────────────────────────────
-legacy_backup() {
-    local stamp
-    stamp="$(date +%Y%m%d-%H%M%S)"
-    local dest="${BACKUP_ROOT}/${stamp}"
-    mkdir -p "$dest"
-
-    local count=0
-    for name in "$@"; do
-        local compose_file="${ROOT}/stacks/${name}/compose.yml"
-        [[ "$name" == "dockge" ]] && compose_file="${ROOT}/dockge/compose.yml"
-
-        if [[ ! -f "$compose_file" ]]; then
-            echo "Unknown app: ${name}" >&2
-            continue
-        fi
-
-        # 备份 data/ 和 logs/ 目录（兼容旧行为）
-        local app_rel
-        if [[ "$name" == "dockge" ]]; then
-            app_rel="dockge"
-        else
-            app_rel="stacks/${name}"
-        fi
-
-        local backed=false
-        for sub in data logs; do
-            local src="${ROOT}/${app_rel}/${sub}"
-            if [[ -d "$src" ]]; then
-                echo "Backing up ${name}/${sub} ..."
-                tar -czf "${dest}/${name}-${sub}.tar.gz" -C "$ROOT" "${app_rel}/${sub}"
-                backed=true
-            fi
-        done
-
-        if $backed; then
-            ((count++)) || true
-        else
-            echo "Skip ${name}: no data/ or logs/ found"
-        fi
-    done
-
-    echo "Backup written to ${dest}"
+    # 迁移安全备份提示
+    if [[ -n "$migration_backup_dir" ]] && [[ -d "$migration_backup_dir" ]]; then
+        echo
+        echo -e "  ${DIM}💡 迁移前安全备份已保存到: ${CYAN}${migration_backup_dir}${NC}"
+        echo -e "  ${DIM}   确认还原无误后可手动删除: rm -rf ${migration_backup_dir}${NC}"
+    fi
 }
 
 # ──────────────────────────────────────────────
@@ -1292,8 +1369,9 @@ main() {
         discover_apps | while read -r name; do echo "  $name"; done
 
     else
-        # 向后兼容：bash scripts/backup.sh jellyfin vaultwarden
-        legacy_backup "$@"
+        echo -e "${YELLOW}未知参数: $*${NC}" >&2
+        echo "用法: $(basename "$0") [backup|restore|--install|--help]" >&2
+        exit 1
     fi
 }
 

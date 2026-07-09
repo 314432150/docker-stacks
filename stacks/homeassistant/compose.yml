@@ -1,7 +1,7 @@
 # ==================== Home Assistant 智能家居 ====================
 services:
   homeassistant:
-    image: ghcr.1ms.run/home-assistant/home-assistant:latest
+    image: home-assistant/home-assistant:latest
     container_name: homeassistant
     restart: unless-stopped
     # 不使用 user: 指令——HA 容器内部自行管理权限，s6 初始化阶段需要 root

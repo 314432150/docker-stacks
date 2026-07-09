@@ -2,8 +2,8 @@
 # 官方 Docker 文档: https://docs.openclaw.ai/install/docker
 services:
   openclaw:
-    # ghcr.1ms.run 为 ghcr.io 国内镜像，与项目其他栈保持一致
-    image: ghcr.1ms.run/openclaw/openclaw:latest-browser
+    # 29d74323f5559e6e1290bdf172954216.d.1ms.run 为 ghcr.io 国内镜像
+    image: 29d74323f5559e6e1290bdf172954216.d.1ms.run/openclaw/openclaw:latest-browser
     container_name: openclaw
     init: true
     restart: unless-stopped

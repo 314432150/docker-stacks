@@ -1,6 +1,6 @@
 # Docker Stacks
 
-NAS 上运行的 Docker Compose 服务编排仓库，通过飞牛 NAS (fnOS) 自带 Docker 工具管理。
+NAS 上运行的 Docker Compose 服务编排仓库，部署在 `/srv/docker-stacks` 下。
 
 ## 目录结构
 
@@ -53,27 +53,29 @@ docker-stacks/
 ## 快速开始
 
 ```bash
-# 1. 克隆到 NAS
-sudo git clone https://github.com/314432150/docker-stacks.git /opt/docker-stacks
-sudo chown -R $USER:$(id -gn) /opt/docker-stacks  # sudo clone 的文件属于 root，归还所有权给当前用户
-cd /opt/docker-stacks
+# 1. 创建目录并克隆（放在 /srv 下，无需 sudo clone）
+sudo install -d -o $USER -g $(id -gn) /srv
+git clone https://github.com/314432150/docker-stacks.git /srv/docker-stacks
+cd /srv/docker-stacks
 
 # 2. 复制环境变量模板并修改
 cp global.env.example global.env
 vim global.env
 
-# 3. 安装备份脚本为全局命令（可选，推荐）
+# 3. 安装备份脚本为全局命令
 bash scripts/backup.sh --install
 
-# 4. 在飞牛 NAS Docker 管理界面中导入 stacks/ 下的 compose 文件并启动
+# 4. 通过还原命令导入备份数据并启动所有服务
+sudo ds-backup restore
 ```
+> 还原会自动停止/启动容器，无需手动管理。
 
 ## 入口说明
 
 | 方式 | 命令 | 适用场景 |
 |------|------|----------|
-| fnOS Docker | 飞牛 NAS 管理界面 | **主要方式**：可视化管理所有 compose 栈、容器详情 |
-| 命令行 | `cd stacks/jellyfin && docker compose up -d` | 命令行调试单个服务 |
+| 命令行 | `cd stacks/jellyfin && sudo docker compose up -d` | 启动/管理单个服务 |
+| 全局命令 | `sudo ds-backup` | 备份 / 还原全部应用 |
 
 > 修改根 `global.env` 后所有 stack 自动生效（符号链接）。
 

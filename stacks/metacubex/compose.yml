@@ -40,7 +40,7 @@ services:
 
   # ==================== MetaCubeXD Web 面板 ====================
   metacubexd:
-    image: ghcr.1ms.run/metacubex/metacubexd:latest
+    image: 29d74323f5559e6e1290bdf172954216.d.1ms.run/metacubex/metacubexd:latest
     container_name: metacubexd
     restart: unless-stopped
     user: "${NAS_PUID}:${NAS_PGID}"

@@ -1,7 +1,7 @@
 # ==================== MetaTube 元数据刮削 ====================
 services:
   metatube-server:
-    image: ghcr.1ms.run/metatube-community/metatube-server:latest
+    image: 29d74323f5559e6e1290bdf172954216.d.1ms.run/metatube-community/metatube-server:latest
     container_name: metatube
     restart: unless-stopped
     user: "${NAS_PUID}:${NAS_PGID}"
