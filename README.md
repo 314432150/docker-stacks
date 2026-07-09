@@ -8,7 +8,15 @@ NAS 上运行的 Docker Compose 服务编排仓库，部署在 `/srv/docker-stac
 docker-stacks/
 ├── global.env               # 全局环境变量，所有 stack 的 .env 通过符号链接指向此文件
 ├── scripts/
-│   └── backup.sh            # 备份/恢复交互式脚本，可注册为全局命令 ds-backup
+│   ├── dsctl                 # 主入口，可注册为全局命令 dsctl
+│   └── lib/                  # 功能模块（按职责拆分）
+│       ├── common.sh         #   终端颜色、工具函数
+│       ├── discover.sh       #   应用发现、卷解析
+│       ├── state.sh          #   备份选中状态管理
+│       ├── backup.sh         #   交互式备份
+│       ├── restore.sh        #   交互式还原
+│       ├── deploy.sh         #   交互式部署
+│       └── install.sh        #   安装/卸载全局命令
 ├── backups/                 # 备份输出目录，不进 Git
 │
 └── stacks/                  # 9 个 Docker Compose 应用
@@ -61,26 +69,29 @@ cd /srv/docker-stacks
 # 2. 修改环境变量（按需调整 NAS_IP、存储路径等）
 vim global.env
 
-# 3. 安装备份脚本为全局命令
-bash scripts/backup.sh --install
+# 3. 安装为全局命令
+bash scripts/dsctl --install
 
-# 4. 通过还原命令导入备份数据并启动所有服务
-sudo ds-backup restore
+# 4. 部署所有应用（默认全选，支持交互式勾选）
+sudo dsctl deploy
 ```
-> 还原会自动停止/启动容器，无需手动管理。
+> 部署会自动创建/修复 .env → global.env 符号链接，然后逐应用 docker compose up -d。
+>
+> 恢复旧 NAS 数据：先导入备份文件，再通过 `sudo dsctl restore` 还原。
 
 ## 入口说明
 
 | 方式 | 命令 | 适用场景 |
 |------|------|----------|
 | 命令行 | `cd stacks/jellyfin && sudo docker compose up -d` | 启动/管理单个服务 |
-| 全局命令 | `sudo ds-backup` | 备份 / 还原全部应用 |
+| 全局命令 | `sudo dsctl` | 主菜单（备份 / 还原 / 部署） |
+| 全局命令 | `sudo dsctl deploy` | 快速部署全部/选中应用 |
 
 > 修改根 `global.env` 后所有 stack 自动生效（符号链接）。
 
 
 
-## 备份与恢复
+## 备份、还原与部署
 
 零依赖，纯 Bash 实现。
 
@@ -89,18 +100,23 @@ sudo ds-backup restore
 安装后可在任意目录使用：
 
 ```bash
-# 主菜单（备份 / 还原 / 安装 / 卸载）
-sudo ds-backup
+# 主菜单（备份 / 还原 / 部署 / 安装 / 卸载）
+sudo dsctl
 
 # 直接进入备份模式
-sudo ds-backup backup
+sudo dsctl backup
 
 # 非交互式一键备份全部推荐项
-sudo ds-backup backup -y
+sudo dsctl backup -y
 
 # 直接进入还原模式
-sudo ds-backup restore
+sudo dsctl restore
 
+# 直接进入部署模式（默认全选，可交互式勾选）
+sudo dsctl deploy
+
+# 一键部署全部应用
+sudo dsctl deploy -y
 ```
 
 

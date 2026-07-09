@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# ============================================================
+#  docker-stacks 交互式管理工具 — 备份 / 还原 / 部署 (纯 Bash，零依赖)
+# ============================================================
+#
+# 用法:
+#   bash scripts/dsctl                       # 交互式主菜单（备份 / 还原 / 部署）
+#   bash scripts/dsctl backup                # 进入交互式备份
+#   bash scripts/dsctl backup -y             # 非交互一键备份全部推荐项
+#   bash scripts/dsctl restore               # 进入交互式还原
+#   bash scripts/dsctl deploy                # 进入交互式部署
+#   bash scripts/dsctl deploy -y             # 一键部署全部应用
+#   bash scripts/dsctl --install             # 注册为全局命令 dsctl（安装到 /usr/local/bin）
+#
+# 注册为全局命令后可在任意目录直接调用:
+#   dsctl
+#   dsctl backup -y
+#   dsctl restore
+#   dsctl deploy
+#
+# ⚠️ 推荐用 sudo 执行:
+#   sudo dsctl backup -y
+#   sudo dsctl restore
+#   sudo dsctl deploy
+#
+# 环境变量:
+#   BACKUP_ROOT   备份输出目录（默认: <仓库>/backups）
+#   AUTO_YES      非交互模式，跳过确认（=1）
+#
+set -euo pipefail
+
+# ── 解析脚本真实路径（支持软链接） ──
+_resolve_script() {
+    local src="${BASH_SOURCE[0]}"
+    if command -v realpath &>/dev/null; then
+        realpath "$src"
+    elif command -v readlink &>/dev/null && readlink -f "$src" &>/dev/null 2>&1; then
+        readlink -f "$src"
+    else
+        local dir
+        dir="$(cd "$(dirname "$src")" && pwd)"
+        while [[ -L "$src" ]]; do
+            src="$(readlink "$src")"
+            [[ "$src" != /* ]] && src="$dir/$src"
+            dir="$(cd "$(dirname "$src")" && pwd)"
+        done
+        cd "$dir" && pwd
+        echo "$(cd "$dir" && pwd)/$(basename "$src")"
+    fi
+}
+SCRIPT_PATH="$(_resolve_script)"
+ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+BACKUP_ROOT="${BACKUP_ROOT:-${ROOT}/backups}"
+
+# 全局命令名
+CMD_NAME="dsctl"
+
+# ── 加载功能模块 ──
+LIB_DIR="$(dirname "$SCRIPT_PATH")/lib"
+source "$LIB_DIR/common.sh"
+source "$LIB_DIR/discover.sh"
+source "$LIB_DIR/state.sh"
+source "$LIB_DIR/backup.sh"
+source "$LIB_DIR/restore.sh"
+source "$LIB_DIR/deploy.sh"
+source "$LIB_DIR/install.sh"
+
+# ── 退出时清理 ──
+cleanup() {
+    rm -rf "${ROOT}/.cache/backup-tool"
+}
+trap cleanup EXIT
+
+# ── 主入口 ──
+main() {
+    local _arg1="${1:-}"
+    local _all_args="${*:-}"
+    if [[ $EUID -ne 0 ]] && [[ "$_arg1" != "--install" ]] && [[ "$_arg1" != "-i" ]] && \
+       [[ "$_arg1" != "--uninstall" ]] && [[ "$_arg1" != "--help" ]] && [[ "$_arg1" != "-h" ]]; then
+        echo -e "\n${RED}✗${NC} 备份/还原/部署需 root 权限（部分文件属主非当前用户）"
+        echo -e "  ${BOLD}请用: sudo $(basename "$0") ${_all_args}${NC}\n"
+        exit 1
+    fi
+
+    if [[ $# -eq 0 ]]; then
+        # 无参数：交互式主菜单
+        while true; do
+            printf '\033[H\033[J'
+            header "docker-stacks 管理工具"
+
+            local installed=""
+            if command -v "$CMD_NAME" &>/dev/null; then
+                installed="  ${DIM}(已注册全局命令: ${CMD_NAME})${NC}"
+            fi
+
+            local apps=()
+            while IFS= read -r name; do
+                [[ -n "$name" ]] || continue
+                apps+=("$name")
+            done < <(discover_apps)
+
+            echo -e "  发现 ${BOLD}${#apps[@]}${NC} 个应用:"
+            for name in "${apps[@]}"; do
+                local desc
+                desc="$(get_description "$name")"
+                [[ -n "$desc" ]] && desc=" — ${desc}"
+                local ndirs=0
+                while IFS='|' read -r _ _; do
+                    ((ndirs++)) || true
+                done < <(get_backup_dirs "$name")
+                printf "    ${CYAN}%-16s${NC} ${DIM}%d 个可备份目录${NC}%s\n" "$name" "$ndirs" "$desc"
+            done
+
+            echo
+            echo -e "  [${BOLD}1${NC}] 📦 备份"
+            echo -e "  [${BOLD}2${NC}] 📥 还原"
+            echo -e "  [${BOLD}3${NC}] 🚀 部署"
+            echo -e "  [${BOLD}i${NC}] 📌 安装为全局命令 (${CMD_NAME})"
+            echo -e "  [${BOLD}q${NC}] 退出$installed"
+            echo
+            read -r -p "  > " cmd
+
+            case "$cmd" in
+                q|Q) echo -e "\n${DIM}  再见!${NC}"; break ;;
+                1) interactive_backup; press_enter ;;
+                2) interactive_restore; press_enter ;;
+                3) interactive_deploy; press_enter ;;
+                i|I) install_command; press_enter ;;
+            esac
+        done
+
+    elif [[ "$1" == "--install" ]] || [[ "$1" == "-i" ]]; then
+        install_command
+
+    elif [[ "$1" == "--uninstall" ]]; then
+        uninstall_command
+
+    elif [[ "$1" == "backup" ]]; then
+        shift
+        local auto_yes=0
+        if [[ "${1:-}" == "-y" ]] || [[ "${1:-}" == "--yes" ]]; then
+            auto_yes=1; shift
+        fi
+        interactive_backup "$auto_yes"
+
+    elif [[ "$1" == "restore" ]]; then
+        interactive_restore
+
+    elif [[ "$1" == "deploy" ]]; then
+        shift
+        local auto_yes=0
+        if [[ "${1:-}" == "-y" ]] || [[ "${1:-}" == "--yes" ]]; then
+            auto_yes=1; shift
+        fi
+        interactive_deploy "$auto_yes"
+
+    elif [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+        sed -n '/^# 用法:/,/^# 环境变量:/p' "$0" | sed '$d'
+        echo
+        echo "可管理的应用:"
+        discover_apps | while read -r name; do echo "  $name"; done
+
+    else
+        echo -e "${YELLOW}未知参数: $*${NC}" >&2
+        echo "用法: $(basename "$0") [backup|restore|deploy|--install|--help]" >&2
+        exit 1
+    fi
+}
+
+main "$@"

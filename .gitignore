@@ -25,6 +25,9 @@ backups/*
 # openclaw 内嵌 workspace（含自己的 .git 仓库，不应被外层仓库管理）
 stacks/openclaw/data/config/workspace/
 
+# 运行时缓存
+.cache/
+
 # 系统与编辑器
 .DS_Store
 Thumbs.db
