@@ -6,31 +6,66 @@ NAS 上运行的 Docker Compose 服务编排仓库，通过飞牛 NAS (fnOS) 自
 
 ```text
 docker-stacks/
-  global.env           # 共用变量（唯一源文件）
-  stacks/              # 各应用 compose + 运行时数据
-  scripts/             # 备份、恢复脚本
-```
-
-应用目录：
-
-```text
-stacks/<应用名>/
-  compose.yml
-  .env -> ../../global.env # 符号链接，指向根 global.env，所有 stack 共享同一份
-  data/                # 运行时持久化数据
+├── global.env.example       # 环境变量模板，部署时复制为 global.env 修改
+├── scripts/
+│   └── backup.sh            # 备份/恢复交互式脚本，可注册为全局命令 ds-backup
+├── backups/                 # 备份输出目录，不进 Git
+│
+└── stacks/                  # 9 个 Docker Compose 应用
+    ├── homeassistant/       # 智能家居
+    │   ├── compose.yml
+    │   ├── .env             # symlink → ../../global.env
+    │   └── data/config/
+    ├── jellyfin/            # 媒体服务器
+    │   ├── compose.yml
+    │   ├── .env
+    │   └── data/{cache,config}/
+    ├── lucky/               # DDNS / 反向代理 / SSL 证书
+    │   ├── compose.yml
+    │   ├── .env
+    │   └── data/conf/
+    ├── metacubex/           # 代理（Mihomo / Clash Meta）
+    │   ├── compose.yml
+    │   ├── .env
+    │   └── data/mihomo/
+    ├── metatube/            # 元数据刮削
+    │   ├── compose.yml
+    │   ├── .env
+    │   └── data/config/
+    ├── mosquitto/           # MQTT 消息代理
+    │   ├── compose.yml
+    │   ├── .env
+    │   └── data/{config,data}/
+    ├── openclaw/            # 聊天机器人框架
+    │   ├── compose.yml
+    │   ├── .env
+    │   └── data/{auth,config}/
+    ├── vaultwarden/         # 密码管理器（Bitwarden 兼容）
+    │   ├── compose.yml
+    │   ├── .env
+    │   └── data/
+    └── xunlei/              # 迅雷下载
+        ├── compose.yml
+        ├── .env
+        └── data/{cache,data}/
 ```
 
 ## 快速开始
 
 ```bash
 # 1. 克隆到 NAS
-git clone https://github.com/314432150/docker-stacks.git /opt/docker-stacks
+sudo git clone https://github.com/314432150/docker-stacks.git /opt/docker-stacks
+sudo chown -R $USER:$(id -gn) /opt/docker-stacks  # sudo clone 的文件属于 root，归还所有权给当前用户
 cd /opt/docker-stacks
 
-# 2. 修改 global.env（NAS_IP、MEDIA_ROOT 等），所有 stack 通过 symlink 自动共享
+# 2. 复制环境变量模板并修改
+cp global.env.example global.env
 vim global.env
 
-# 3. 在飞牛 NAS Docker 管理界面中导入 stacks/ 下的 compose 文件并启动
+# 3. 安装备份脚本为全局命令（可选，推荐）
+bash scripts/backup.sh --install
+
+# 4. 在飞牛 NAS Docker 管理界面中导入 stacks/ 下的 compose 文件并启动
 ```
 
 ## 入口说明
@@ -48,24 +83,28 @@ vim global.env
 
 零依赖，纯 Bash 实现。
 
-### 交互式工具
+### 全局命令（推荐）
+
+安装后可在任意目录使用：
 
 ```bash
-# 主菜单（备份 / 还原）
-bash scripts/backup.sh
+# 主菜单（备份 / 还原 / 安装 / 卸载）
+sudo ds-backup
 
 # 直接进入备份模式
-bash scripts/backup.sh backup
+sudo ds-backup backup
 
 # 非交互式一键备份全部推荐项
-bash scripts/backup.sh backup -y
+sudo ds-backup backup -y
 
 # 直接进入还原模式
-bash scripts/backup.sh restore
+sudo ds-backup restore
 
 # 指定备份路径
-BACKUP_ROOT=/mnt/data/nas-backup bash scripts/backup.sh
+sudo BACKUP_ROOT=/mnt/nas-backup ds-backup
 ```
+
+
 
 **功能亮点：**
 - 自动发现 `stacks/` 下所有应用，无需手动维护应用列表
@@ -86,5 +125,5 @@ bash scripts/restore.sh backups/20250625-120000 jellyfin
 
 ## 仓库边界
 
-- **进 Git**：全部文件，包括 `global.env`、`data/` 运行时数据、脚本、文档
+- **进 Git**：模板文件（`global.env.example`、`*.example`）、脚本、文档、目录结构
 - **不进 Git**：`backups/`（备份输出）
