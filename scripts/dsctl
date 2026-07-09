@@ -85,7 +85,7 @@ main() {
     if [[ $# -eq 0 ]]; then
         # 无参数：交互式主菜单
         while true; do
-            printf '\033[H\033[J'
+            printf '\033[H\033[2J'
             header "docker-stacks 管理工具"
 
             local installed=""

@@ -21,7 +21,7 @@ interactive_deploy() {
     if [[ "$auto_yes" != "1" ]]; then
 
     _rline() {
-        local i="$1" name="$2" is_cursor="$3"
+        local name="$2" is_cursor="$3"
         local desc; desc="$(get_description "$name")"
         [[ -n "$desc" ]] && desc=" — ${desc}"
 
@@ -33,25 +33,26 @@ interactive_deploy() {
         if $checked; then marker="${GREEN}✔${NC}"
         else marker="${DIM}·${NC}"; fi
 
-        local compose_dir
-        if [[ "$name" == "dockge" ]]; then compose_dir="${ROOT}/dockge"
-        else compose_dir="${ROOT}/stacks/${name}"; fi
-
-        local env_status=""
-        if [[ -L "${compose_dir}/.env" ]]; then
-            env_status=" ${DIM}(env ✓)${NC}"
-        elif [[ -f "${compose_dir}/.env" ]]; then
-            env_status=" ${DIM}(env=文件)${NC}"
-        fi
-
         if [[ $is_cursor -eq 1 ]]; then
-            printf "  ${YELLOW}▸${NC} %b ${BOLD}${WHITE}%-16s${NC}%b%s\n" \
-                "$marker" "$name" "$env_status" "$desc"
+            printf "  ${YELLOW}▸${NC} %b ${BOLD}${WHITE}%-16s${NC}%s\n" \
+                "$marker" "$name" "$desc"
         else
-            printf "    %b ${BOLD}%-16s${NC}%b%s\n" \
-                "$marker" "$name" "$env_status" "$desc"
+            printf "    %b ${BOLD}%-16s${NC}%s\n" \
+                "$marker" "$name" "$desc"
         fi
     }
+    _toggle_app() {
+        local name="$1"
+        local new_selected=()
+        local found=false
+        for s in "${deploy_selected[@]}"; do
+            if [[ "$s" == "$name" ]]; then found=true
+            else new_selected+=("$s"); fi
+        done
+        if ! $found; then new_selected+=("$name"); fi
+        deploy_selected=("${new_selected[@]}")
+    }
+
     _upd_line() {
         local i="$1"
         local name="${app_names[$i]}"
@@ -70,20 +71,10 @@ interactive_deploy() {
         echo -e "  ${DIM}[d/Enter] 开始部署  [q] 退出${NC}"
         printf '\033[?25l'
     }
-    _toggle_app() {
-        local name="$1"
-        local new_selected=()
-        local found=false
-        for s in "${deploy_selected[@]}"; do
-            if [[ "$s" == "$name" ]]; then found=true
-            else new_selected+=("$s"); fi
-        done
-        if ! $found; then new_selected+=("$name"); fi
-        deploy_selected=("${new_selected[@]}")
-    }
 
+    # 首次全量绘制
     local cursor=0
-    printf '\033[H\033[J'; printf '\033[?25l'
+    printf '\033[H\033[2J'; printf '\033[?25l'
     header "🚀 部署 — 选择要启动的应用"
     for i in "${!app_names[@]}"; do
         local is_first=0
@@ -142,7 +133,7 @@ interactive_deploy() {
     done
 
     if [[ ${#deploy_selected[@]} -eq 0 ]]; then
-        echo -e "${YELLOW}  没有选中任何应用，已取消${NC}"
+        echo -e "${YELLOW}  没有选择任何应用，已取消${NC}"
         return
     fi
     fi  # end TUI
@@ -189,6 +180,34 @@ interactive_deploy() {
         echo -e "  ${YELLOW}⚠ global.env 不存在，将使用各应用本地 .env${NC}"
     fi
 
+    # ── 检测并停止已运行的容器 ──
+    echo
+    section "检查运行中容器"
+    local stopped=0
+    for name in "${deploy_selected[@]}"; do
+        local compose_dir
+        if [[ "$name" == "dockge" ]]; then compose_dir="${ROOT}/dockge"
+        else compose_dir="${ROOT}/stacks/${name}"; fi
+
+        if [[ ! -f "${compose_dir}/compose.yml" ]]; then
+            continue
+        fi
+
+        local running
+        running=$(cd "$compose_dir" && docker compose ps --services --filter "status=running" 2>/dev/null | head -1)
+        if [[ -n "$running" ]]; then
+            printf "  ${BLUE}↓${NC} 停止 ${BOLD}${name}${NC} ... "
+            if (cd "$compose_dir" && docker compose down 2>/dev/null); then
+                echo -e "${GREEN}✓${NC}"
+                ((stopped++)) || true
+            else
+                echo -e "${RED}✗${NC}"
+            fi
+        else
+            echo -e "  ${DIM}·${NC} ${name} ${DIM}(未运行)${NC}"
+        fi
+    done
+
     # 执行部署
     echo
     section "启动容器"
@@ -204,7 +223,7 @@ interactive_deploy() {
             continue
         fi
 
-        printf "  ${BLUE}→${NC} 部署 ${BOLD}${name}${NC} ... "
+        printf "  ${BLUE}↑${NC} 部署 ${BOLD}${name}${NC} ... "
         if (cd "$compose_dir" && docker compose up -d 2>/dev/null); then
             echo -e "${GREEN}✓${NC}"
             ((success++)) || true

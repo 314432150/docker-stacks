@@ -19,7 +19,7 @@ customize_app() {
     fi
 
     while true; do
-        printf '\033[H\033[J'
+        printf '\033[H\033[2J'
         header "🔧 自定义 ${name} 备份目录"
 
         for i in "${!dirs[@]}"; do
@@ -104,14 +104,14 @@ interactive_backup() {
 
     # ── TUI 渲染辅助 ──
     _rline() {
-        local i="$1" name="$2" is_cursor="$3"
+        local name="$2" is_cursor="$3"
         local desc
         desc="$(get_description "$name")"
         [[ -n "$desc" ]] && desc=" — ${desc}"
 
         local checkbox
-        if app_has_selection "$name"; then checkbox="${GREEN}[✓]${NC}"
-        else checkbox="${DIM}[ ]${NC}"; fi
+        if app_has_selection "$name"; then checkbox="${GREEN}✔${NC}"
+        else checkbox="${DIM}·${NC}"; fi
 
         local check_str=""
         while IFS='|' read -r src is_cache; do
@@ -147,7 +147,7 @@ interactive_backup() {
         local n=${#app_names_with_dirs[@]}
         printf '\033[%d;0H\033[J' $((5 + n))
         echo
-        echo -e "  选中 ${GREEN}${count}${NC} 个应用"
+        echo -e "  已选 ${GREEN}${count}${NC} 个应用"
         echo
         echo -e "  ${DIM}[↑↓/jk] 移动  [空格] 勾选/取消  [a] 全选/取消全选  [c] 自定义目录${NC}"
         echo -e "  ${DIM}[b/Enter] 开始备份  [q] 退出${NC}"
@@ -156,7 +156,7 @@ interactive_backup() {
 
     # 首次全量绘制
     local cursor=0
-    printf '\033[H\033[J'
+    printf '\033[H\033[2J'
     printf '\033[?25l'
     header "📦 备份 — 选择要备份的内容"
     for i in "${!app_names_with_dirs[@]}"; do
@@ -217,7 +217,7 @@ interactive_backup() {
             c|C)
                 printf '\033[?25h'
                 customize_app "${app_names_with_dirs[$cursor]}"
-                printf '\033[H\033[J'; printf '\033[?25l'
+                printf '\033[H\033[2J'; printf '\033[?25l'
                 header "📦 备份 — 选择要备份的内容"
                 for i in "${!app_names_with_dirs[@]}"; do
                     local is_cur=0
@@ -234,7 +234,7 @@ interactive_backup() {
     done
 
     if ! has_any_selected; then
-        echo -e "${YELLOW}  没有选中任何内容，已取消${NC}"
+        echo -e "${YELLOW}  没有选择任何内容，已取消${NC}"
         return
     fi
     fi  # end TUI vs auto_yes

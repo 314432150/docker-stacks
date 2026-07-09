@@ -16,7 +16,7 @@ backup_size_mb() {
     local bp="$1"
     local total_size
     total_size=$(stat -c%s "$bp" 2>/dev/null || stat -f%z "$bp" 2>/dev/null || echo 0)
-    echo "scale=1; $total_size / 1048576" | bc 2>/dev/null || echo "?"
+    awk "BEGIN {printf \"%.0f\", $total_size / 1048576}"
 }
 
 app_archive_paths() {
@@ -65,7 +65,7 @@ interactive_restore() {
 
     # 选择备份
     while true; do
-        printf '\033[H\033[J'
+        printf '\033[H\033[2J'
         header "📥 还原 — 选择备份"
 
         for i in "${!backups[@]}"; do
@@ -123,7 +123,9 @@ interactive_restore() {
 
     while true; do
         _rline() {
-            local i="$1" name="$2" is_cursor="$3"
+            local name="$2" is_cursor="$3"
+            local desc; desc="$(get_description "$name")"
+            [[ -n "$desc" ]] && desc=" — ${desc}"
             local checked=false
             for s in "${restore_selected[@]}"; do
                 [[ "$s" == "$name" ]] && checked=true && break
@@ -131,15 +133,27 @@ interactive_restore() {
             local marker
             if $checked; then marker="${GREEN}✔${NC}"
             else marker="${DIM}·${NC}"; fi
-            local ac="${app_archive_counts[$i]}"
+            local ac="${app_archive_counts[$1]}"
             if [[ $is_cursor -eq 1 ]]; then
-                printf "  ${YELLOW}▸${NC} %b ${BOLD}${WHITE}%-16s${NC} ${DIM}%d 个归档${NC}\n" \
-                    "$marker" "$name" "$ac"
+                printf "  ${YELLOW}▸${NC} %b ${BOLD}${WHITE}%-16s${NC} ${DIM}%d个归档${NC}%s\n" \
+                    "$marker" "$name" "$ac" "$desc"
             else
-                printf "    %b ${BOLD}%-16s${NC} ${DIM}%d 个归档${NC}\n" \
-                    "$marker" "$name" "$ac"
+                printf "    %b ${BOLD}%-16s${NC} ${DIM}%d个归档${NC}%s\n" \
+                    "$marker" "$name" "$ac" "$desc"
             fi
         }
+        _toggle_app() {
+            local name="$1"
+            local new_selected=()
+            local found=false
+            for s in "${restore_selected[@]}"; do
+                if [[ "$s" == "$name" ]]; then found=true
+                else new_selected+=("$s"); fi
+            done
+            if ! $found; then new_selected+=("$name"); fi
+            restore_selected=("${new_selected[@]}")
+        }
+
         _upd_line() {
             local i="$1"
             local name="${backup_apps[$i]}"
@@ -158,20 +172,10 @@ interactive_restore() {
             echo -e "  ${DIM}[r/Enter] 开始还原  [q] 退出${NC}"
             printf '\033[?25l'
         }
-        _toggle_app() {
-            local name="$1"
-            local new_selected=()
-            local found=false
-            for s in "${restore_selected[@]}"; do
-                if [[ "$s" == "$name" ]]; then found=true
-                else new_selected+=("$s"); fi
-            done
-            if ! $found; then new_selected+=("$name"); fi
-            restore_selected=("${new_selected[@]}")
-        }
 
+        # 首次全量绘制
         local cursor=0
-        printf '\033[H\033[J'; printf '\033[?25l'
+        printf '\033[H\033[2J'; printf '\033[?25l'
         header "📥 还原 — $(basename "$selected_backup")"
         for i in "${!backup_apps[@]}"; do
             local is_first=0
@@ -229,7 +233,7 @@ interactive_restore() {
         done
 
         if [[ ${#restore_selected[@]} -eq 0 ]]; then
-            echo -e "${YELLOW}  未选择任何应用${NC}"
+            echo -e "${YELLOW}  没有选择任何应用${NC}"
             press_enter
             continue
         fi
