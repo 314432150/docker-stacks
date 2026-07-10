@@ -61,7 +61,7 @@ docker-stacks/
 ## 快速开始
 
 ```bash
-# 1. 创建目录并克隆（放在 /srv 下，无需 sudo clone）
+# 1. 创建目录并克隆（放在 /srv 下）
 sudo install -d -o $USER -g $(id -gn) /srv
 git clone https://github.com/314432150/docker-stacks.git /srv/docker-stacks
 cd /srv/docker-stacks
