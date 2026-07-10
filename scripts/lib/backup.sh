@@ -156,6 +156,7 @@ interactive_backup() {
 
     # 首次全量绘制
     local cursor=0
+    printf '\033[?1049h'   # 进入备用屏幕：隔离滚动历史区，根治 web 终端重复渲染
     printf '\033[H\033[2J'
     printf '\033[?25l'
     header "📦 备份 — 选择要备份的内容"
@@ -182,6 +183,7 @@ interactive_backup() {
                 printf '\033[%d;1H\033[J' $((5 + n + 5))
                 echo -e "${YELLOW}  已取消${NC}"
                 _tui_cancelled=1
+                printf '\033[?1049l'   # 离开备用屏幕
                 return ;;
             $'\033[A'|k|K)
                 if [[ $cursor -gt 0 ]]; then
@@ -229,6 +231,7 @@ interactive_backup() {
             ''|$'\r'|$'\n'|b|B)
                 printf '\033[?25h'
                 printf '\033[%d;1H\033[J' $((5 + ${#app_names_with_dirs[@]} + 5))
+                printf '\033[?1049l'   # 离开备用屏幕，回到正常屏幕做确认界面
                 break ;;
             *)  ;;
         esac

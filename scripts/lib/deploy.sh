@@ -74,6 +74,7 @@ interactive_deploy() {
 
     # 首次全量绘制
     local cursor=0
+    printf '\033[?1049h'   # 进入备用屏幕：隔离滚动历史区，根治 web 终端重复渲染
     printf '\033[H\033[2J'; printf '\033[?25l'
     header "🚀 部署 — 选择要启动的应用"
     for i in "${!app_names[@]}"; do
@@ -99,6 +100,7 @@ interactive_deploy() {
                 printf '\033[%d;1H\033[J' $((5 + n + 5))
                 echo -e "${YELLOW}  已取消${NC}"
                 _tui_cancelled=1
+                printf '\033[?1049l'   # 离开备用屏幕
                 return ;;
             $'\033[A'|k|K)
                 if [[ $cursor -gt 0 ]]; then
@@ -128,6 +130,7 @@ interactive_deploy() {
             ''|$'\r'|$'\n'|d|D)
                 printf '\033[?25h'
                 printf '\033[%d;1H\033[J' $((5 + ${#app_names[@]} + 5))
+                printf '\033[?1049l'   # 离开备用屏幕，回到正常屏幕做确认界面
                 break ;;
             *)  ;;
         esac
