@@ -268,17 +268,30 @@ interactive_restore() {
             printf '\033[?25l'
         }
 
-        # 首次全量绘制
+        # 整屏重绘（对滚动免疫，任意终端尺寸都不错位；用于矮窗口降级）
+        _redraw_all() {
+            printf '\033[H\033[2J'; printf '\033[?25l'
+            header "📥 还原 — $(basename "$selected_backup")"
+            for i in "${!backup_apps[@]}"; do
+                local is_cur=0
+                [[ $i -eq $cursor ]] && is_cur=1
+                _rline "$i" "${backup_apps[$i]}" "$is_cur"
+            done
+            echo
+            echo -e "  已选 ${GREEN}${#restore_selected[@]}${NC} 个应用"
+            echo
+            echo -e "  ${DIM}[↑↓/jk] 移动  [空格] 勾选/取消  [a] 全选/取消全选${NC}"
+            echo -e "  ${DIM}[r/Enter] 开始还原  [q] 退出${NC}"
+            printf '\033[?25l'
+        }
+
+        # 首次全量绘制（_redraw_all 对滚动免疫，任意终端尺寸都不错位）
         local cursor=0
+        local tui_need=$(( 5 + ${#backup_apps[@]} + 6 ))
+        local TUI_FIT=0
+        tui_fits "$tui_need" && TUI_FIT=1
         printf '\033[?1049h'   # 进入备用屏幕：隔离滚动历史区，根治 web 终端重复渲染
-        printf '\033[H\033[2J'; printf '\033[?25l'
-        header "📥 还原 — $(basename "$selected_backup")"
-        for i in "${!backup_apps[@]}"; do
-            local is_first=0
-            [[ $i -eq 0 ]] && is_first=1
-            _rline "$i" "${backup_apps[$i]}" "$is_first"
-        done
-        _upd_summary
+        _redraw_all
 
         while true; do
             local key
@@ -300,28 +313,44 @@ interactive_restore() {
                 $'\033[A'|k|K)
                     if [[ $cursor -gt 0 ]]; then
                         local prev=$cursor; cursor=$((cursor - 1))
-                        _upd_line "$prev"; _upd_line "$cursor"
-                        printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                        if [[ $TUI_FIT -eq 1 ]]; then
+                            _upd_line "$prev"; _upd_line "$cursor"
+                            printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                        else
+                            _redraw_all
+                        fi
                     fi ;;
                 $'\033[B'|j|J)
                     local max=$(( ${#backup_apps[@]} - 1 ))
                     if [[ $cursor -lt $max ]]; then
                         local prev=$cursor; cursor=$((cursor + 1))
-                        _upd_line "$prev"; _upd_line "$cursor"
-                        printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                        if [[ $TUI_FIT -eq 1 ]]; then
+                            _upd_line "$prev"; _upd_line "$cursor"
+                            printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                        else
+                            _redraw_all
+                        fi
                     fi ;;
                 ' ')
                     _toggle_app "${backup_apps[$cursor]}"
-                    _upd_line "$cursor"; _upd_summary
-                    printf '\033[%d;1H\033[?25l' $((5 + cursor)) ;;
+                    if [[ $TUI_FIT -eq 1 ]]; then
+                        _upd_line "$cursor"; _upd_summary
+                        printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                    else
+                        _redraw_all
+                    fi ;;
                 a|A)
                     if [[ ${#restore_selected[@]} -eq 0 ]]; then
                         restore_selected=("${backup_apps[@]}")
                     else
                         restore_selected=()
                     fi
-                    for i in "${!backup_apps[@]}"; do _upd_line "$i"; done
-                    _upd_summary ;;
+                    if [[ $TUI_FIT -eq 1 ]]; then
+                        for i in "${!backup_apps[@]}"; do _upd_line "$i"; done
+                        _upd_summary
+                    else
+                        _redraw_all
+                    fi ;;
                 ''|$'\r'|$'\n'|r|R)
                     printf '\033[?25h'
                     printf '\033[%d;1H\033[J' $((5 + ${#backup_apps[@]} + 5))

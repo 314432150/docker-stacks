@@ -72,17 +72,30 @@ interactive_deploy() {
         printf '\033[?25l'
     }
 
-    # 首次全量绘制
+    # 整屏重绘（对滚动免疫，任意终端尺寸都不错位；用于矮窗口降级）
+    _redraw_all() {
+        printf '\033[H\033[2J'; printf '\033[?25l'
+        header "🚀 部署 — 选择要启动的应用"
+        for i in "${!app_names[@]}"; do
+            local is_cur=0
+            [[ $i -eq $cursor ]] && is_cur=1
+            _rline "$i" "${app_names[$i]}" "$is_cur"
+        done
+        echo
+        echo -e "  已选 ${GREEN}${#deploy_selected[@]}${NC}/${#app_names[@]} 个应用"
+        echo
+        echo -e "  ${DIM}[↑↓/jk] 移动  [空格] 勾选/取消  [a] 全选/取消全选${NC}"
+        echo -e "  ${DIM}[d/Enter] 开始部署  [q] 退出${NC}"
+        printf '\033[?25l'
+    }
+
+    # 首次全量绘制（_redraw_all 对滚动免疫，任意终端尺寸都不错位）
     local cursor=0
+    local tui_need=$(( 5 + ${#app_names[@]} + 6 ))
+    local TUI_FIT=0
+    tui_fits "$tui_need" && TUI_FIT=1
     printf '\033[?1049h'   # 进入备用屏幕：隔离滚动历史区，根治 web 终端重复渲染
-    printf '\033[H\033[2J'; printf '\033[?25l'
-    header "🚀 部署 — 选择要启动的应用"
-    for i in "${!app_names[@]}"; do
-        local is_first=0
-        [[ $i -eq 0 ]] && is_first=1
-        _rline "$i" "${app_names[$i]}" "$is_first"
-    done
-    _upd_summary
+    _redraw_all
 
     while true; do
         local key
@@ -105,28 +118,44 @@ interactive_deploy() {
             $'\033[A'|k|K)
                 if [[ $cursor -gt 0 ]]; then
                     local prev=$cursor; cursor=$((cursor - 1))
-                    _upd_line "$prev"; _upd_line "$cursor"
-                    printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                    if [[ $TUI_FIT -eq 1 ]]; then
+                        _upd_line "$prev"; _upd_line "$cursor"
+                        printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                    else
+                        _redraw_all
+                    fi
                 fi ;;
             $'\033[B'|j|J)
                 local max=$(( ${#app_names[@]} - 1 ))
                 if [[ $cursor -lt $max ]]; then
                     local prev=$cursor; cursor=$((cursor + 1))
-                    _upd_line "$prev"; _upd_line "$cursor"
-                    printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                    if [[ $TUI_FIT -eq 1 ]]; then
+                        _upd_line "$prev"; _upd_line "$cursor"
+                        printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                    else
+                        _redraw_all
+                    fi
                 fi ;;
             ' ')
                 _toggle_app "${app_names[$cursor]}"
-                _upd_line "$cursor"; _upd_summary
-                printf '\033[%d;1H\033[?25l' $((5 + cursor)) ;;
+                if [[ $TUI_FIT -eq 1 ]]; then
+                    _upd_line "$cursor"; _upd_summary
+                    printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                else
+                    _redraw_all
+                fi ;;
             a|A)
                 if [[ ${#deploy_selected[@]} -eq ${#app_names[@]} ]]; then
                     deploy_selected=()
                 else
                     deploy_selected=("${app_names[@]}")
                 fi
-                for i in "${!app_names[@]}"; do _upd_line "$i"; done
-                _upd_summary ;;
+                if [[ $TUI_FIT -eq 1 ]]; then
+                    for i in "${!app_names[@]}"; do _upd_line "$i"; done
+                    _upd_summary
+                else
+                    _redraw_all
+                fi ;;
             ''|$'\r'|$'\n'|d|D)
                 printf '\033[?25h'
                 printf '\033[%d;1H\033[J' $((5 + ${#app_names[@]} + 5))

@@ -71,3 +71,13 @@ check_mark() {
         echo -e "${DIM}·${NC}"
     fi
 }
+
+# 判断终端行数是否足以完整容纳 TUI（need 行）。
+# 不够时由调用方降级为整屏重绘，避免 web 终端过矮时内容滚动导致绝对定位错位。
+tui_fits() {
+    local need="$1"
+    local rows
+    rows="$(tput lines 2>/dev/null)"
+    [[ -z "$rows" ]] && rows="${LINES:-24}"
+    [[ "$rows" =~ ^[0-9]+$ ]] && (( rows >= need ))
+}

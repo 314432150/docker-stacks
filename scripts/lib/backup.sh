@@ -154,18 +154,30 @@ interactive_backup() {
         printf '\033[?25l'
     }
 
-    # 首次全量绘制
+    # 整屏重绘（对滚动免疫，任意终端尺寸都不错位；用于矮窗口降级）
+    _redraw_all() {
+        printf '\033[H\033[2J'; printf '\033[?25l'
+        header "📦 备份 — 选择要备份的内容"
+        for i in "${!app_names_with_dirs[@]}"; do
+            local is_cur=0
+            [[ $i -eq $cursor ]] && is_cur=1
+            _rline "$i" "${app_names_with_dirs[$i]}" "$is_cur"
+        done
+        echo
+        echo -e "  已选 ${GREEN}$(count_selected_apps)${NC} 个应用"
+        echo
+        echo -e "  ${DIM}[↑↓/jk] 移动  [空格] 勾选/取消  [a] 全选/取消全选  [c] 自定义目录${NC}"
+        echo -e "  ${DIM}[b/Enter] 开始备份  [q] 退出${NC}"
+        printf '\033[?25l'
+    }
+
+    # 首次全量绘制（_redraw_all 对滚动免疫，任意终端尺寸都不错位）
     local cursor=0
+    local tui_need=$(( 5 + ${#app_names_with_dirs[@]} + 6 ))
+    local TUI_FIT=0
+    tui_fits "$tui_need" && TUI_FIT=1
     printf '\033[?1049h'   # 进入备用屏幕：隔离滚动历史区，根治 web 终端重复渲染
-    printf '\033[H\033[2J'
-    printf '\033[?25l'
-    header "📦 备份 — 选择要备份的内容"
-    for i in "${!app_names_with_dirs[@]}"; do
-        local is_first=0
-        [[ $i -eq 0 ]] && is_first=1
-        _rline "$i" "${app_names_with_dirs[$i]}" "$is_first"
-    done
-    _upd_summary
+    _redraw_all
 
     while true; do
         local key
@@ -189,21 +201,33 @@ interactive_backup() {
                 if [[ $cursor -gt 0 ]]; then
                     local prev=$cursor
                     cursor=$((cursor - 1))
-                    _upd_line "$prev"; _upd_line "$cursor"
-                    printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                    if [[ $TUI_FIT -eq 1 ]]; then
+                        _upd_line "$prev"; _upd_line "$cursor"
+                        printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                    else
+                        _redraw_all
+                    fi
                 fi ;;
             $'\033[B'|j|J)
                 local max=$(( ${#app_names_with_dirs[@]} - 1 ))
                 if [[ $cursor -lt $max ]]; then
                     local prev=$cursor
                     cursor=$((cursor + 1))
-                    _upd_line "$prev"; _upd_line "$cursor"
-                    printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                    if [[ $TUI_FIT -eq 1 ]]; then
+                        _upd_line "$prev"; _upd_line "$cursor"
+                        printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                    else
+                        _redraw_all
+                    fi
                 fi ;;
             ' ')
                 toggle_app "${app_names_with_dirs[$cursor]}"
-                _upd_line "$cursor"; _upd_summary
-                printf '\033[%d;1H\033[?25l' $((5 + cursor)) ;;
+                if [[ $TUI_FIT -eq 1 ]]; then
+                    _upd_line "$cursor"; _upd_summary
+                    printf '\033[%d;1H\033[?25l' $((5 + cursor))
+                else
+                    _redraw_all
+                fi ;;
             a|A)
                 if has_any_selected; then
                     rm -rf "$STATE_DIR"; mkdir -p "$STATE_DIR"
@@ -215,19 +239,16 @@ interactive_backup() {
                     rm -rf "$STATE_DIR"; mkdir -p "$STATE_DIR"
                     select_all_recommended
                 fi
-                for i in "${!app_names_with_dirs[@]}"; do _upd_line "$i"; done
-                _upd_summary ;;
+                if [[ $TUI_FIT -eq 1 ]]; then
+                    for i in "${!app_names_with_dirs[@]}"; do _upd_line "$i"; done
+                    _upd_summary
+                else
+                    _redraw_all
+                fi ;;
             c|C)
                 printf '\033[?25h'
                 customize_app "${app_names_with_dirs[$cursor]}"
-                printf '\033[H\033[2J'; printf '\033[?25l'
-                header "📦 备份 — 选择要备份的内容"
-                for i in "${!app_names_with_dirs[@]}"; do
-                    local is_cur=0
-                    [[ $i -eq $cursor ]] && is_cur=1
-                    _rline "$i" "${app_names_with_dirs[$i]}" "$is_cur"
-                done
-                _upd_summary ;;
+                _redraw_all ;;
             ''|$'\r'|$'\n'|b|B)
                 printf '\033[?25h'
                 printf '\033[%d;1H\033[J' $((5 + ${#app_names_with_dirs[@]} + 5))
