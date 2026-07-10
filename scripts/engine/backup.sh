@@ -1,7 +1,7 @@
 # ============================================================
 #  engine/backup.sh — 备份指定应用
 # ============================================================
-# 依赖: lib/discover.sh, lib/state.sh, engine/_lib.sh
+# 依赖: lib/discover.sh, engine/_lib.sh
 #
 # 权限: 以 root 运行时 tar 可读取任何属主的文件，保留原始权限
 #       以普通用户运行时，root 属主文件将 Permission denied
@@ -30,11 +30,13 @@ _build_backup_paths() {
 # ── 备份清理：保留最近 N 个备份文件 ──
 _cleanup_old_backups() {
     local keep="$1"
+    local current="$2"  # 当前刚生成的备份文件，不参与清理
     [[ "$keep" -le 0 ]] && return 0
 
     local files=()
     local f
     while IFS= read -r f; do
+        [[ "$f" == "$current" ]] && continue  # 防御：排除当前备份
         files+=("$f")
     done < <(ls -1t "${BACKUP_ROOT}"/*.tar.gz 2>/dev/null || true)
 
@@ -154,7 +156,7 @@ cmd_backup() {
 
         # ── 清理旧备份 ──
         if [[ "$keep_count" -gt 0 ]]; then
-            _cleanup_old_backups "$keep_count"
+            _cleanup_old_backups "$keep_count" "$archive"
         fi
 
         _emit "{\"type\":\"done\",\"file\":\"${archive_name}\",\"size\":\"${size}\",\"path\":\"${archive}\"}"

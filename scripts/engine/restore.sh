@@ -46,8 +46,14 @@ _pre_restore_backup() {
         local check_path="${ROOT}/${dir_path}"
         if [[ -d "$check_path" ]]; then
             _emit "{\"type\":\"progress\",\"step\":\"安全备份 ${dir_path}\"}"
-            if tar -czf "$pre_archive" -C "$ROOT" "${dir_path}" 2>/dev/null; then
+            local tar_err; tar_err="$(mktemp)"
+            if tar -czf "$pre_archive" -C "$ROOT" "${dir_path}" 2>"$tar_err"; then
                 _emit "{\"type\":\"progress\",\"step\":\"安全备份完成: ${pre_archive##*${BACKUP_ROOT}/}\"}"
+                rm -f "$tar_err"
+            else
+                local err_msg; err_msg="$(cat "$tar_err" 2>/dev/null | tr '\n' ' ' | head -c 200)"
+                rm -f "$tar_err"
+                _emit "{\"type\":\"error\",\"msg\":\"安全备份失败 (${dir_path}): ${err_msg}\"}"
             fi
         fi
     done < <(_app_archive_paths "$archive" "$app")
@@ -142,5 +148,6 @@ cmd_restore() {
     done
 
     _emit "{\"type\":\"done\",\"success\":${success},\"fail\":${fail}}"
+    [[ $fail -gt 0 ]] && return 1
     return 0
 }

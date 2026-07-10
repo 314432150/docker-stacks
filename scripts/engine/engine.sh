@@ -40,7 +40,6 @@ fi
 # ── 加载 lib 纯工具库 ──
 source "$LIB_DIR/common.sh"
 source "$LIB_DIR/discover.sh"
-source "$LIB_DIR/state.sh"
 source "$LIB_DIR/webdav.sh"
 
 # ── 加载 engine 模块（按依赖顺序） ──
@@ -80,19 +79,19 @@ _main() {
             _emit '{"type":"error","msg":"未指定子命令，用法: engine.sh {discover|backup|restore|deploy} [...]"}'
             return 1 ;;
         --help)
-            echo "用法: engine.sh {discover|backup|restore|deploy} [参数...]"
-            echo ""
-            echo "子命令:"
-            echo "  discover              扫描所有应用，输出 JSON 列表（含权限级别）"
-            echo "  backup [选项] <app...> 备份指定应用 → JSONL 事件流"
-            echo "    选项:"
-            echo "      --upload           备份后自动上传到 WebDAV（需配置 WEBDAV_*）"
-            echo "      --keep N           保留最近 N 个本地备份，删除更旧的"
-            echo "  restore <archive> <app...>  从备份还原指定应用"
-            echo "  deploy <app...>       部署指定应用（docker compose up）"
-            echo ""
-            echo "所有命令输出 JSONL 事件流到 stdout，日志到 stderr"
-            echo "退出码: 0=成功, 1=参数错误, 2=锁冲突, 3=前置条件不满足"
+            echo "用法: engine.sh {discover|backup|restore|deploy} [参数...]" >&2
+            echo "" >&2
+            echo "子命令:" >&2
+            echo "  discover              扫描所有应用，输出 JSON 列表（含权限级别）" >&2
+            echo "  backup [选项] <app...> 备份指定应用 → JSONL 事件流" >&2
+            echo "    选项:" >&2
+            echo "      --upload           备份后自动上传到 WebDAV（需配置 WEBDAV_*）" >&2
+            echo "      --keep N           保留最近 N 个本地备份，删除更旧的" >&2
+            echo "  restore <archive> <app...>  从备份还原指定应用" >&2
+            echo "  deploy <app...>       部署指定应用（docker compose up）" >&2
+            echo "" >&2
+            echo "所有命令输出 JSONL 事件流到 stdout，日志到 stderr" >&2
+            echo "退出码: 0=成功, 1=参数错误, 2=锁冲突, 3=前置条件不满足" >&2
             ;;
         *)  _emit "{\"type\":\"error\",\"msg\":\"未知子命令: ${cmd}\"}"; return 1 ;;
     esac

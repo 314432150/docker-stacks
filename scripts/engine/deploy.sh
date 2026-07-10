@@ -69,7 +69,7 @@ cmd_deploy() {
         # 启动
         _emit "{\"type\":\"progress\",\"step\":\"部署 ${app}\",\"current\":$((success + fail + 1)),\"total\":${#apps[@]}}"
 
-        if (cd "$compose_dir" && docker compose up -d 2>/dev/null); then
+        if timeout 120 docker compose -f "${compose_dir}/compose.yml" up -d 2>/dev/null; then
             _emit "{\"type\":\"ok\",\"app\":\"${app}\"}"
             ((success++)) || true
         else
@@ -79,5 +79,6 @@ cmd_deploy() {
     done
 
     _emit "{\"type\":\"done\",\"success\":${success},\"fail\":${fail}}"
+    [[ $fail -gt 0 ]] && return 1
     return 0
 }
