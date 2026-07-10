@@ -6,12 +6,14 @@ import Dashboard from './views/Dashboard.vue'
 import Backup from './views/Backup.vue'
 import Restore from './views/Restore.vue'
 import Deploy from './views/Deploy.vue'
+import Settings from './views/Settings.vue'
 
 const routes = [
   { path: '/', component: Dashboard },
   { path: '/backup', component: Backup },
   { path: '/restore', component: Restore },
   { path: '/deploy', component: Deploy },
+  { path: '/settings', component: Settings },
 ]
 
 const router = createRouter({

@@ -7,17 +7,23 @@
 #       以普通用户运行时，root 属主文件将 Permission denied
 
 # ── 内部：构建 tar 打包路径列表（纯数据，不 emit） ──
-# 参数: app_name
+# 参数: app_name [dir1,dir2,...]
+# 第 2 个参数为可选逗号分隔目录列表，指定时仅备份这些目录
 # 输出到 stdout: 每行  {rel_path}|{status}
 #   status: "ok"=正常, "skip"=目录不存在
 # 注意: 本函数不调用 _emit，避免 JSON 行混入 tar 路径
 _build_backup_paths() {
     local name="$1"
+    local only_dirs="$2"
 
     local dirs=()
-    while IFS='|' read -r src _; do
-        [[ -n "$src" ]] && dirs+=("$src")
-    done < <(get_backup_dirs "$name")
+    if [[ -n "$only_dirs" ]]; then
+        IFS=',' read -ra dirs <<< "$only_dirs"
+    else
+        while IFS='|' read -r src _; do
+            [[ -n "$src" ]] && dirs+=("$src")
+        done < <(get_backup_dirs "$name")
+    fi
 
     for d in "${dirs[@]}"; do
         local app_rel="stacks/${name}"
@@ -99,16 +105,33 @@ cmd_backup() {
     trap _release_lock EXIT
 
     local stamp; stamp="$(date +%Y%m%d-%H%M%S)"
+
+    # 从 app_entry (可能为 "name:dir1,dir2" 格式) 中提取纯 app 名
+    _extract_app_name() {
+        local entry="$1"
+        if [[ "$entry" == *:* ]]; then
+            echo "${entry%%:*}"
+        else
+            echo "$entry"
+        fi
+    }
+
+    # 构建纯 app 名列表（用于文件名、JSON 输出）
+    local pure_apps=()
+    for entry in "${apps[@]}"; do
+        pure_apps+=("$(_extract_app_name "$entry")")
+    done
+
     local app_suffix
-    app_suffix="$(printf '_%s' "${apps[@]}")"
+    app_suffix="$(printf '_%s' "${pure_apps[@]}")"
     local archive_name="${stamp}${app_suffix}.tar.gz"
     local archive="${BACKUP_ROOT}/${archive_name}"
 
-    # 构建 JSON 数组字符串
+    # 构建 JSON 数组字符串（仅纯 app 名）
     local apps_json="["
-    for i in "${!apps[@]}"; do
+    for i in "${!pure_apps[@]}"; do
         [[ $i -gt 0 ]] && apps_json+=","
-        apps_json+="\"${apps[$i]}\""
+        apps_json+="\"${pure_apps[$i]}\""
     done
     apps_json+="]"
 
@@ -116,7 +139,16 @@ cmd_backup() {
 
     # 收集所有要打包的路径（解析 {rel_path}|{status} 格式）
     local paths=()
-    for app in "${apps[@]}"; do
+    for entry in "${apps[@]}"; do
+        local app dirs_str
+        if [[ "$entry" == *:* ]]; then
+            app="${entry%%:*}"
+            dirs_str="${entry#*:}"
+        else
+            app="$entry"
+            dirs_str=""
+        fi
+
         while IFS='|' read -r rel_path status; do
             [[ -z "$rel_path" ]] && continue
             if [[ "$status" == "skip" ]]; then
@@ -125,7 +157,7 @@ cmd_backup() {
             fi
             _emit "{\"type\":\"progress\",\"step\":\"收集 ${app}/${rel_path##*/}\"}"
             paths+=("$rel_path")
-        done < <(_build_backup_paths "$app")
+        done < <(_build_backup_paths "$app" "$dirs_str")
     done
 
     if [[ ${#paths[@]} -eq 0 ]]; then

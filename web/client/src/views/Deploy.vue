@@ -14,6 +14,23 @@ const error = ref('')
 const taskId = ref('')
 const sseUrl = ref('')
 
+// ── 全选 ──
+const allAppNames = computed(() => apps.value.map(a => a.name))
+const allSelected = computed(() =>
+  apps.value.length > 0 && selectedApps.value.length === apps.value.length
+)
+const allIndeterminate = computed(() =>
+  selectedApps.value.length > 0 && selectedApps.value.length < apps.value.length
+)
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    selectedApps.value = []
+  } else {
+    selectedApps.value = [...allAppNames.value]
+  }
+}
+
 const preSelect = computed(() => route.query.app ? [route.query.app] : [])
 
 async function loadApps() {
@@ -55,6 +72,17 @@ function onDone() {
   <div>
     <n-text tag="h2" style="margin: 0 0 20px 0">部署</n-text>
     <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
+
+    <n-space align="center" style="margin-bottom: 8px">
+      <n-checkbox
+        :checked="allSelected"
+        :indeterminate="allIndeterminate"
+        @update:checked="toggleSelectAll"
+      >
+        <n-text strong>全选</n-text>
+      </n-checkbox>
+      <n-text depth="3">已选 {{ selectedApps.length }}/{{ apps.length }} 个应用</n-text>
+    </n-space>
 
     <n-checkbox-group v-model:value="selectedApps">
       <n-space vertical>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { NText, NCheckboxGroup, NCheckbox, NInput, NButton, NSpace, NAlert, NDivider } from 'naive-ui'
 import { fetchApps, runRestore } from '../composables/useApi.js'
 import { getSSEUrl } from '../composables/useSSE.js'
@@ -12,6 +12,23 @@ const selectedApps = ref([])
 const error = ref('')
 const taskId = ref('')
 const sseUrl = ref('')
+
+// ── 全选 ──
+const allAppNames = computed(() => apps.value.map(a => a.name))
+const allSelected = computed(() =>
+  apps.value.length > 0 && selectedApps.value.length === apps.value.length
+)
+const allIndeterminate = computed(() =>
+  selectedApps.value.length > 0 && selectedApps.value.length < apps.value.length
+)
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    selectedApps.value = []
+  } else {
+    selectedApps.value = [...allAppNames.value]
+  }
+}
 
 async function loadApps() {
   try {
@@ -57,6 +74,17 @@ function onDone() {
     <n-space vertical style="max-width: 500px; margin-bottom: 16px">
       <n-text>备份文件名</n-text>
       <n-input v-model:value="archive" placeholder="如 20260711-0230_openclaw.tar.gz" />
+    </n-space>
+
+    <n-space align="center" style="margin-bottom: 8px">
+      <n-checkbox
+        :checked="allSelected"
+        :indeterminate="allIndeterminate"
+        @update:checked="toggleSelectAll"
+      >
+        <n-text strong>全选</n-text>
+      </n-checkbox>
+      <n-text depth="3">已选 {{ selectedApps.length }}/{{ apps.length }} 个应用</n-text>
     </n-space>
 
     <n-checkbox-group v-model:value="selectedApps">

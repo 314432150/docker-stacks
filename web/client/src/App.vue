@@ -5,7 +5,7 @@ import {
   NLayout, NLayoutHeader, NLayoutContent, NMenu, NText, NSpace,
   NConfigProvider, NButton, NIcon, darkTheme,
 } from 'naive-ui'
-import { CubeOutline, SunnyOutline, MoonOutline } from '@vicons/ionicons5'
+import { CubeOutline, SunnyOutline, MoonOutline, SettingsOutline } from '@vicons/ionicons5'
 
 const THEME_KEY = 'ds-web-theme'
 
@@ -73,6 +73,7 @@ const menuItems = [
   { label: () => h(RouterLink, { to: '/backup' }, { default: () => '备份' }), key: '/backup' },
   { label: () => h(RouterLink, { to: '/restore' }, { default: () => '还原' }), key: '/restore' },
   { label: () => h(RouterLink, { to: '/deploy' }, { default: () => '部署' }), key: '/deploy' },
+  { label: () => h(RouterLink, { to: '/settings' }, { default: () => '设置' }), key: '/settings' },
 ]
 </script>
 

@@ -45,6 +45,30 @@ export function validateNonNegativeInt(val) {
 }
 
 /**
+ * 校验目录名列表（可选）
+ * @param {*} dirs
+ * @returns {string|null}
+ */
+export function validateDirs(dirs) {
+  if (dirs === undefined || dirs === null) return null
+  if (typeof dirs !== 'object' || Array.isArray(dirs)) return 'dirs 必须为对象 {appName: [dir1, dir2]}'
+  for (const [app, arr] of Object.entries(dirs)) {
+    if (typeof app !== 'string' || !APP_NAME_RE.test(app)) {
+      return `dirs 中的非法应用名: ${app}`
+    }
+    if (!Array.isArray(arr)) {
+      return `dirs.${app} 必须为数组`
+    }
+    for (const d of arr) {
+      if (typeof d !== 'string' || d.includes('..') || d.startsWith('/')) {
+        return `非法目录: ${d}`
+      }
+    }
+  }
+  return null
+}
+
+/**
  * 校验备份文件名（禁止路径遍历）
  * @param {string} archive
  * @returns {string|null}

@@ -3,11 +3,11 @@
 
 import { executeEngine } from '../engine.js'
 import { createTask, pushEvent, setTaskStatus } from '../tasks.js'
-import { validateApps, validateBoolean, validateNonNegativeInt } from '../validate.js'
+import { validateApps, validateBoolean, validateNonNegativeInt, validateDirs } from '../validate.js'
 
 export default async function backupRoutes(fastify) {
   fastify.post('/api/backup', async (request, reply) => {
-    const { apps, upload, keep } = request.body || {}
+    const { apps, upload, keep, dirs } = request.body || {}
 
     // ── 校验 ──
     const appsErr = validateApps(apps)
@@ -22,12 +22,23 @@ export default async function backupRoutes(fastify) {
     if (keepErr) {
       return reply.code(400).send({ error: true, code: 'VALIDATION_ERROR', message: `keep ${keepErr}` })
     }
+    const dirsErr = validateDirs(dirs)
+    if (dirsErr) {
+      return reply.code(400).send({ error: true, code: 'VALIDATION_ERROR', message: dirsErr })
+    }
 
-    // ── 构建引擎参数 ──
+    // ── 构建引擎参数：app 名或 app:dir1,dir2 格式 ──
     const engineArgs = []
     if (upload) engineArgs.push('--upload')
     if (keep && keep > 0) engineArgs.push('--keep', String(keep))
-    engineArgs.push(...apps)
+    for (const app of apps) {
+      const appDirs = dirs?.[app]
+      if (appDirs && appDirs.length > 0) {
+        engineArgs.push(`${app}:${appDirs.join(',')}`)
+      } else {
+        engineArgs.push(app)
+      }
+    }
 
     // ── 创建任务 ──
     const task = createTask('backup')

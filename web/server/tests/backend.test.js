@@ -208,6 +208,24 @@ describe('REST API 路由', () => {
     assert.strictEqual(res.statusCode, 400)
   })
 
+  it('POST /api/backup 非法 dirs → 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backup',
+      payload: { apps: ['test-app'], dirs: 'invalid' },
+    })
+    assert.strictEqual(res.statusCode, 400)
+  })
+
+  it('POST /api/backup dirs 含路径遍历 → 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backup',
+      payload: { apps: ['test-app'], dirs: { 'test-app': ['../etc'] } },
+    })
+    assert.strictEqual(res.statusCode, 400)
+  })
+
   // ── POST /api/backup 正常流程 ──
   it('POST /api/backup 正常返回 202 + taskId', async () => {
     const res = await app.inject({
@@ -281,6 +299,17 @@ describe('REST API 路由', () => {
     })
     assert.strictEqual(res.statusCode, 404)
   })
+
+  // ── GET /api/settings/webdav ──
+  it('GET /api/settings/webdav 返回配置状态', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/settings/webdav' })
+    if (res.statusCode === 500) return  // 无 global.env 时跳过
+    assert.strictEqual(res.statusCode, 200)
+    const body = res.json()
+    assert.ok('configured' in body)
+    assert.ok('url' in body)
+    assert.ok('hasPassword' in body)
+  })
 })
 
 describe('参数校验函数 (validate.js)', () => {
@@ -318,5 +347,21 @@ describe('参数校验函数 (validate.js)', () => {
 
   it('validateArchive 绝对路径 → 错误', () => {
     assert.ok(validate.validateArchive('/etc/passwd') !== null)
+  })
+
+  it('validateDirs 有效 → null', () => {
+    assert.strictEqual(validate.validateDirs({ 'test-app': ['data/config'] }), null)
+  })
+
+  it('validateDirs undefined → null', () => {
+    assert.strictEqual(validate.validateDirs(undefined), null)
+  })
+
+  it('validateDirs 非对象 → 错误', () => {
+    assert.ok(validate.validateDirs('invalid') !== null)
+  })
+
+  it('validateDirs 含 .. → 错误', () => {
+    assert.ok(validate.validateDirs({ 'test-app': ['../etc'] }) !== null)
   })
 })

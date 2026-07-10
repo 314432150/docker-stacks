@@ -1,9 +1,11 @@
 import { fetchWithError } from './useSSE.js'
 
-export async function runBackup(apps, { upload = false, keep = 0 } = {}) {
+export async function runBackup(apps, { upload = false, keep = 0, dirs = null } = {}) {
+  const body = { apps, upload, keep }
+  if (dirs) body.dirs = dirs
   const res = await fetchWithError('/api/backup', {
     method: 'POST',
-    body: { apps, upload, keep },
+    body,
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -41,6 +43,27 @@ export async function fetchApps() {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.message || `获取应用列表失败 (${res.status})`)
+  }
+  return await res.json()
+}
+
+export async function fetchWebdavSettings() {
+  const res = await fetchWithError('/api/settings/webdav')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.message || `获取 WebDAV 设置失败 (${res.status})`)
+  }
+  return await res.json()
+}
+
+export async function saveWebdavSettings({ url, user, pass }) {
+  const res = await fetchWithError('/api/settings/webdav', {
+    method: 'PUT',
+    body: { url, user, pass },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.message || `保存 WebDAV 设置失败 (${res.status})`)
   }
   return await res.json()
 }
