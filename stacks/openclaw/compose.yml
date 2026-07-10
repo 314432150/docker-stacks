@@ -52,6 +52,8 @@ services:
       - ./data/config:/home/node/.openclaw
       # 鉴权密钥目录（与配置分离保存）
       - ./data/auth:/home/node/.config/openclaw
+      # 备份存档（openclaw backup create --output /backups）
+      # - ./data/backups:/backups
       # 让代理能访问并管理 NAS 媒体库与下载目录（按需调整权限）
       - ${MEDIA_ROOT}:/media
       - ${DOWNLOAD_ROOT}:/downloads

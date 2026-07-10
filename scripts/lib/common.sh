@@ -52,7 +52,14 @@ confirm() {
     done
 }
 
+# 统一退出标志：TUI 中途按 q 退出时置 1，dsctl 据此跳过 press_enter 避免"双重回车"
+_tui_cancelled=0
+
 press_enter() {
+    if [[ "${_tui_cancelled:-0}" -eq 1 ]]; then
+        _tui_cancelled=1
+        return 0
+    fi
     echo -en "  ${DIM}按回车继续...${NC}"
     read -r
 }

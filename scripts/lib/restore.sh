@@ -29,71 +29,166 @@ app_archive_paths() {
 }
 
 interactive_restore() {
-    local backups=()
-    if [[ -d "$BACKUP_ROOT" ]]; then
-        while IFS= read -r -d '' f; do
-            local bname; bname="$(basename "$f")"
-            [[ "$bname" == pre_restore_* ]] && continue
-            backups+=("$bname")
-        done < <(find "$BACKUP_ROOT" -maxdepth 1 -mindepth 1 -name '*.tar.gz' -print0 2>/dev/null | sort -rz)
-    fi
+    # ── 来源选择 ──
+    local source=""
+    while true; do
+        printf '\033[H\033[2J'
+        header "📥 还原 — 选择来源"
 
-    if [[ ${#backups[@]} -eq 0 ]]; then
-        echo -e "\n${YELLOW}  备份目录为空${NC}"
-        echo -e "  路径: ${CYAN}${BACKUP_ROOT}${NC}"
+        echo -e "  ${DIM}从何处获取备份文件:${NC}"
         echo
-        echo -e "  ${BOLD}📋 NAS 迁移 — 导入备份文件${NC}"
+        echo -e "  [${BOLD}1${NC}] 本地备份 (本机 ${CYAN}${BACKUP_ROOT}${NC})"
+        echo -e "  [${BOLD}2${NC}] WebDAV 远程备份"
+        echo -e "  [${BOLD}q${NC}] 返回"
         echo
-        echo -e "  请先将旧 NAS 上的备份文件复制到当前服务器:"
-        echo
-        echo -e "  ${DIM}方式1 — rsync 直接拉取 (推荐):${NC}"
-        echo -e "    ${BOLD}rsync -avP 旧NAS用户名@旧NAS_IP:${ROOT}/backups/ ${BACKUP_ROOT}/${NC}"
-        echo
-        echo -e "  ${DIM}方式2 — scp 手动复制:${NC}"
-        echo -e "    ${BOLD}scp -r 旧NAS用户名@旧NAS_IP:${ROOT}/backups/* ${BACKUP_ROOT}/${NC}"
-        echo
-        echo -e "  ${DIM}方式3 — 外接存储 / SMB 挂载:${NC}"
-        echo -e "    ${BOLD}cp -r /mnt/usb/backups/* ${BACKUP_ROOT}/${NC}"
-        echo
-        echo -e "  ${DIM}完成后重新运行: sudo ${CMD_NAME} restore${NC}"
-        echo
-        press_enter
-        return
-    fi
+        read -r -p "  > " cmd
+
+        case "$cmd" in
+            1) source="local"; break ;;
+            2) source="remote"; break ;;
+            q|Q) _tui_cancelled=1; return ;;
+            *) echo -e "\n  ${RED}无效选择，请输入 1、2 或 q${NC}"; sleep 1 ;;
+        esac
+    done
 
     local selected_backup=""
 
-    # 选择备份
-    while true; do
-        printf '\033[H\033[2J'
-        header "📥 还原 — 选择备份"
+    if [[ "$source" == "local" ]]; then
+        local backups=()
+        if [[ -d "$BACKUP_ROOT" ]]; then
+            while IFS= read -r -d '' f; do
+                local bname; bname="$(basename "$f")"
+                [[ "$bname" == pre_restore_* ]] && continue
+                backups+=("$bname")
+            done < <(find "$BACKUP_ROOT" -maxdepth 1 -mindepth 1 -name '*.tar.gz' -print0 2>/dev/null | sort -rz)
+        fi
 
-        for i in "${!backups[@]}"; do
-            local b="${backups[$i]}"
-            local bpath="${BACKUP_ROOT}/${b}"
-            local size_mb; size_mb="$(backup_size_mb "$bpath")"
-            local apps
-            apps="$(list_apps_in_backup "$bpath" | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
-            [[ -z "$apps" ]] && apps="${DIM}(空)${NC}"
+        if [[ ${#backups[@]} -eq 0 ]]; then
+            echo -e "\n${YELLOW}  本地备份目录为空${NC}"
+            echo -e "  路径: ${CYAN}${BACKUP_ROOT}${NC}"
+            echo
+            echo -e "  ${BOLD}📋 NAS 迁移 — 导入备份文件${NC}"
+            echo
+            echo -e "  请先将旧 NAS 上的备份文件复制到当前服务器:"
+            echo
+            echo -e "  ${DIM}方式1 — rsync 直接拉取 (推荐):${NC}"
+            echo -e "    ${BOLD}rsync -avP 旧NAS用户名@旧NAS_IP:${ROOT}/backups/ ${BACKUP_ROOT}/${NC}"
+            echo
+            echo -e "  ${DIM}方式2 — scp 手动复制:${NC}"
+            echo -e "    ${BOLD}scp -r 旧NAS用户名@旧NAS_IP:${ROOT}/backups/* ${BACKUP_ROOT}/${NC}"
+            echo
+            echo -e "  ${DIM}方式3 — 外接存储 / SMB 挂载:${NC}"
+            echo -e "    ${BOLD}cp -r /mnt/usb/backups/* ${BACKUP_ROOT}/${NC}"
+            echo
+            echo -e "  ${DIM}完成后重新运行: sudo ${CMD_NAME} restore${NC}"
+            echo
+            press_enter
+            return
+        fi
 
-            printf "  [%d] ${BOLD}%s${NC}  ${DIM}%s MB${NC}\n" "$((i+1))" "$b" "$size_mb"
-            echo -e "      应用: ${apps}"
+        while true; do
+            printf '\033[H\033[2J'
+            header "📥 还原 — 选择本地备份"
+
+            for i in "${!backups[@]}"; do
+                local b="${backups[$i]}"
+                local bpath="${BACKUP_ROOT}/${b}"
+                local size_mb; size_mb="$(backup_size_mb "$bpath")"
+                local apps
+                apps="$(list_apps_in_backup "$bpath" | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
+                [[ -z "$apps" ]] && apps="${DIM}(空)${NC}"
+
+                printf "  [%d] ${BOLD}%s${NC}  ${DIM}%s MB${NC}\n" "$((i+1))" "$b" "$size_mb"
+                echo -e "      应用: ${apps}"
+            done
+
+            echo
+            echo -e "  ${DIM}命令: [数字]选择备份  [q]退出${NC}"
+            read -r -p "  > " cmd
+
+            if [[ "$cmd" == "q" || "$cmd" == "Q" ]]; then
+                _tui_cancelled=1
+                return
+            elif [[ "$cmd" =~ ^[0-9]+$ ]]; then
+                local idx=$((cmd - 1))
+                if [[ $idx -ge 0 ]] && [[ $idx -lt ${#backups[@]} ]]; then
+                    selected_backup="${BACKUP_ROOT}/${backups[$idx]}"
+                    break
+                else
+                    echo -e "  ${RED}无效序号，请选择 1-${#backups[@]}${NC}"; sleep 1
+                fi
+            else
+                echo -e "  ${RED}请输入数字序号或 q${NC}"; sleep 1
+            fi
         done
 
-        echo
-        echo -e "  ${DIM}命令: [数字]选择备份  [q]退出${NC}"
-        read -r -p "  > " cmd
-
-        if [[ "$cmd" == "q" || "$cmd" == "Q" ]]; then
+    else
+        if ! webdav_configured; then
+            echo -e "\n${YELLOW}  WebDAV 未配置${NC}"
+            echo -e "  请先在主菜单 [w] 配置 WebDAV 远程备份"
+            echo
+            press_enter
             return
-        elif [[ "$cmd" =~ ^[0-9]+$ ]]; then
-            local idx=$((cmd - 1))
-            if [[ $idx -ge 0 ]] && [[ $idx -lt ${#backups[@]} ]]; then
-                selected_backup="${BACKUP_ROOT}/${backups[$idx]}"
-                break
-            fi
         fi
-    done
+
+        local remote_files=()
+        while IFS= read -r f; do
+            [[ -n "$f" ]] && remote_files+=("$f")
+        done < <(webdav_list 2>/dev/null || true)
+
+        if [[ ${#remote_files[@]} -eq 0 ]]; then
+            echo -e "\n${YELLOW}  WebDAV 上没有找到备份文件${NC}"
+            echo
+            press_enter
+            return
+        fi
+
+        while true; do
+            printf '\033[H\033[2J'
+            header "📥 还原 — 选择远程备份"
+
+            for i in "${!remote_files[@]}"; do
+                local rf="${remote_files[$i]}"
+                local rsize; rsize="$(webdav_file_size "$rf" 2>/dev/null)"
+                local rsize_mb=""
+                [[ -n "$rsize" ]] && rsize_mb="$(awk "BEGIN {printf \"%.0f\", $rsize / 1048576}") MB"
+                printf "  [%d] ${BOLD}%s${NC}  ${DIM}%s${NC}\n" "$((i+1))" "$rf" "$rsize_mb"
+            done
+
+            echo
+            echo -e "  ${DIM}命令: [数字]选择备份  [q]退出${NC}"
+            read -r -p "  > " cmd
+
+            if [[ "$cmd" == "q" || "$cmd" == "Q" ]]; then
+                _tui_cancelled=1
+                return
+            elif [[ "$cmd" =~ ^[0-9]+$ ]]; then
+                local idx=$((cmd - 1))
+                if [[ $idx -ge 0 ]] && [[ $idx -lt ${#remote_files[@]} ]]; then
+                    local rf="${remote_files[$idx]}"
+                    local tmp_dir; tmp_dir="$(mktemp -d)"
+                    local local_path="${tmp_dir}/${rf}"
+                    echo
+                    printf "  ${BLUE}⏳${NC} 正在从 WebDAV 下载 ${CYAN}%s${NC} ... " "$rf"
+                    if webdav_download "$rf" "$local_path"; then
+                        echo -e "${GREEN}✓${NC}"
+                        selected_backup="$local_path"
+                        break
+                    else
+                        echo -e "${RED}✗ 下载失败${NC}"
+                        rm -rf "$tmp_dir"
+                        echo
+                        press_enter
+                        return
+                    fi
+                else
+                    echo -e "  ${RED}无效序号，请选择 1-${#remote_files[@]}${NC}"; sleep 1
+                fi
+            else
+                echo -e "  ${RED}无效序号，请选择 1-${#remote_files[@]}${NC}"; sleep 1
+            fi
+        done
+    fi
 
     # 缓存 tar 列表
     _TAR_CACHE=$(tar -tzf "$selected_backup" 2>/dev/null || true)
@@ -159,12 +254,12 @@ interactive_restore() {
             local name="${backup_apps[$i]}"
             local is_cur=0
             [[ $i -eq $cursor ]] && is_cur=1
-            printf '\033[%d;0H\033[K' $((5 + i))
+            printf '\033[%d;1H\033[K' $((5 + i))
             _rline "$i" "$name" "$is_cur"
         }
         _upd_summary() {
             local n=${#backup_apps[@]}
-            printf '\033[%d;0H\033[J' $((5 + n))
+            printf '\033[%d;1H\033[J' $((5 + n))
             echo
             echo -e "  已选 ${GREEN}${#restore_selected[@]}${NC} 个应用"
             echo
@@ -197,25 +292,26 @@ interactive_restore() {
                 q|Q)
                     printf '\033[?25h'
                     local n=${#backup_apps[@]}
-                    printf '\033[%d;0H\033[J' $((5 + n + 5))
+                    printf '\033[%d;1H\033[J' $((5 + n + 5))
+                    _tui_cancelled=1
                     return ;;
                 $'\033[A'|k|K)
                     if [[ $cursor -gt 0 ]]; then
                         local prev=$cursor; cursor=$((cursor - 1))
                         _upd_line "$prev"; _upd_line "$cursor"
-                        printf '\033[%d;0H\033[?25l' $((5 + cursor))
+                        printf '\033[%d;1H\033[?25l' $((5 + cursor))
                     fi ;;
                 $'\033[B'|j|J)
                     local max=$(( ${#backup_apps[@]} - 1 ))
                     if [[ $cursor -lt $max ]]; then
                         local prev=$cursor; cursor=$((cursor + 1))
                         _upd_line "$prev"; _upd_line "$cursor"
-                        printf '\033[%d;0H\033[?25l' $((5 + cursor))
+                        printf '\033[%d;1H\033[?25l' $((5 + cursor))
                     fi ;;
                 ' ')
                     _toggle_app "${backup_apps[$cursor]}"
                     _upd_line "$cursor"; _upd_summary
-                    printf '\033[%d;0H\033[?25l' $((5 + cursor)) ;;
+                    printf '\033[%d;1H\033[?25l' $((5 + cursor)) ;;
                 a|A)
                     if [[ ${#restore_selected[@]} -eq 0 ]]; then
                         restore_selected=("${backup_apps[@]}")
@@ -226,7 +322,7 @@ interactive_restore() {
                     _upd_summary ;;
                 ''|$'\r'|$'\n'|r|R)
                     printf '\033[?25h'
-                    printf '\033[%d;0H\033[J' $((5 + ${#backup_apps[@]} + 5))
+                    printf '\033[%d;1H\033[J' $((5 + ${#backup_apps[@]} + 5))
                     break ;;
                 *)  ;;
             esac

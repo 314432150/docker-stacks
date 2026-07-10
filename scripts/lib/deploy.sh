@@ -58,12 +58,12 @@ interactive_deploy() {
         local name="${app_names[$i]}"
         local is_cur=0
         [[ $i -eq $cursor ]] && is_cur=1
-        printf '\033[%d;0H\033[K' $((5 + i))
+        printf '\033[%d;1H\033[K' $((5 + i))
         _rline "$i" "$name" "$is_cur"
     }
     _upd_summary() {
         local n=${#app_names[@]}
-        printf '\033[%d;0H\033[J' $((5 + n))
+        printf '\033[%d;1H\033[J' $((5 + n))
         echo
         echo -e "  已选 ${GREEN}${#deploy_selected[@]}${NC}/${n} 个应用"
         echo
@@ -96,26 +96,27 @@ interactive_deploy() {
             q|Q)
                 printf '\033[?25h'
                 local n=${#app_names[@]}
-                printf '\033[%d;0H\033[J' $((5 + n + 5))
+                printf '\033[%d;1H\033[J' $((5 + n + 5))
                 echo -e "${YELLOW}  已取消${NC}"
+                _tui_cancelled=1
                 return ;;
             $'\033[A'|k|K)
                 if [[ $cursor -gt 0 ]]; then
                     local prev=$cursor; cursor=$((cursor - 1))
                     _upd_line "$prev"; _upd_line "$cursor"
-                    printf '\033[%d;0H\033[?25l' $((5 + cursor))
+                    printf '\033[%d;1H\033[?25l' $((5 + cursor))
                 fi ;;
             $'\033[B'|j|J)
                 local max=$(( ${#app_names[@]} - 1 ))
                 if [[ $cursor -lt $max ]]; then
                     local prev=$cursor; cursor=$((cursor + 1))
                     _upd_line "$prev"; _upd_line "$cursor"
-                    printf '\033[%d;0H\033[?25l' $((5 + cursor))
+                    printf '\033[%d;1H\033[?25l' $((5 + cursor))
                 fi ;;
             ' ')
                 _toggle_app "${app_names[$cursor]}"
                 _upd_line "$cursor"; _upd_summary
-                printf '\033[%d;0H\033[?25l' $((5 + cursor)) ;;
+                printf '\033[%d;1H\033[?25l' $((5 + cursor)) ;;
             a|A)
                 if [[ ${#deploy_selected[@]} -eq ${#app_names[@]} ]]; then
                     deploy_selected=()
@@ -126,7 +127,7 @@ interactive_deploy() {
                 _upd_summary ;;
             ''|$'\r'|$'\n'|d|D)
                 printf '\033[?25h'
-                printf '\033[%d;0H\033[J' $((5 + ${#app_names[@]} + 5))
+                printf '\033[%d;1H\033[J' $((5 + ${#app_names[@]} + 5))
                 break ;;
             *)  ;;
         esac

@@ -127,4 +127,49 @@ sudo dsctl deploy -y
 - 每个应用预选推荐备份项（跳过缓存目录），可自由勾选
 - 还原时列出所有历史备份，自由选择要还原的应用
 - 备份格式：`{时间戳}_{描述}_{应用列表}.tar.gz`，如 `20260710-045320_test_homeassistant_jellyfin_...tar.gz`
+- 支持远程 WebDAV 备份/还原（坚果云、Nextcloud、群晖等）
+
+
+## 远程 WebDAV 备份
+
+dsctl 支持将备份文件上传到远程 WebDAV 服务器，以及从远程 WebDAV 下载还原。
+
+### 配置
+
+在 `global.env` 中设置以下变量：
+
+```bash
+WEBDAV_URL=https://your-webdav-server.com/path/to/backups
+WEBDAV_USER=your_username
+WEBDAV_PASS=your_password
+```
+
+### 坚果云 配置示例
+
+1. 登录 [坚果云](https://www.jianguoyun.com/)
+2. 进入 **账户信息 → 安全选项 → 第三方应用管理**
+3. 添加一个应用，生成专用密码
+4. 在坚果云中创建一个目录（如 `/backups`），用于存放备份文件
+5. 在 `global.env` 中配置：
+
+```bash
+WEBDAV_URL=https://dav.jianguoyun.com/dav/backups
+WEBDAV_USER=你的坚果云邮箱
+WEBDAV_PASS=第三方应用专用密码
+```
+
+> ⚠️ **安全提示**：`WEBDAV_PASS` 是敏感信息。如果仓库需要公开，建议将 `global.env` 加入 `.gitignore`，或用单独的不受版本控制的凭据文件。
+
+### 使用
+
+```bash
+# 备份：打包完成后会询问是否上传到 WebDAV
+sudo dsctl backup
+
+# 还原：可选择「本地备份」或「远程 WebDAV 备份」
+sudo dsctl restore
+```
+
+- 备份时，本地 `.tar.gz` 始终保留，WebDAV 上传为额外副本
+- 还原时，从 WebDAV 下载的文件会缓存到本地 `backups/` 目录
 

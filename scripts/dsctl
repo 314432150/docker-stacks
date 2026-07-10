@@ -52,6 +52,14 @@ SCRIPT_PATH="$(_resolve_script)"
 ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 BACKUP_ROOT="${BACKUP_ROOT:-${ROOT}/backups}"
 
+# 加载全局环境变量（WebDAV 配置等）
+if [[ -f "${ROOT}/global.env" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "${ROOT}/global.env"
+    set +a
+fi
+
 # 全局命令名
 CMD_NAME="dsctl"
 
@@ -64,6 +72,7 @@ source "$LIB_DIR/backup.sh"
 source "$LIB_DIR/restore.sh"
 source "$LIB_DIR/deploy.sh"
 source "$LIB_DIR/install.sh"
+source "$LIB_DIR/webdav.sh"
 
 # ── 退出时清理 ──
 cleanup() {
@@ -115,6 +124,7 @@ main() {
             echo -e "  [${BOLD}1${NC}] 📦 备份"
             echo -e "  [${BOLD}2${NC}] 📥 还原"
             echo -e "  [${BOLD}3${NC}] 🚀 部署"
+            echo -e "  [${BOLD}w${NC}] 🔧 配置 WebDAV 远程备份"
             echo -e "  [${BOLD}i${NC}] 📌 安装为全局命令 (${CMD_NAME})"
             echo -e "  [${BOLD}q${NC}] 退出$installed"
             echo
@@ -122,10 +132,12 @@ main() {
 
             case "$cmd" in
                 q|Q) echo -e "\n${DIM}  再见!${NC}"; break ;;
-                1) interactive_backup; press_enter ;;
-                2) interactive_restore; press_enter ;;
-                3) interactive_deploy; press_enter ;;
-                i|I) install_command; press_enter ;;
+                1) interactive_backup; press_enter; _tui_cancelled=0 ;;
+                2) interactive_restore; press_enter; _tui_cancelled=0 ;;
+                3) interactive_deploy; press_enter; _tui_cancelled=0 ;;
+                w|W) webdav_menu; press_enter; _tui_cancelled=0 ;;
+                i|I) install_command; press_enter; _tui_cancelled=0 ;;
+                *) echo -e "\n  ${RED}无效选择，请输入 1-3、w、i 或 q${NC}"; sleep 1 ;;
             esac
         done
 
