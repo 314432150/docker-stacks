@@ -42,13 +42,11 @@ scripts/
 │   ├── backup.sh              # cmd_backup
 │   ├── restore.sh             # cmd_restore
 │   └── deploy.sh              # cmd_deploy
-├── lib/                       # 纯库（被 engine 和旧 dsctl 共同引用）
-│   ├── common.sh              # 颜色 + 工具（header/section/confirm 等 TUI 函数保留给 dsctl）
+├── lib/                       # 纯库（引擎引用）
+│   ├── common.sh              # 颜色 + 工具
 │   ├── discover.sh            # 应用扫描 + 卷解析
 │   ├── state.sh               # 备份选中状态文件管理
 │   └── webdav.sh              # WebDAV 纯函数（上传/下载/列表/连接测试）
-└── tests/
-    └── test_engine.sh         # Engine 集成测试套件
 ```
 
 ## 3. 模块职责
@@ -112,7 +110,11 @@ JSON 事件类型规范：
 
 ```
 函数：
-  cmd_backup <app1> [app2 ...]
+  cmd_backup [选项] <app1> [app2 ...]
+
+选项：
+  --upload    备份后自动上传到 WebDAV（需配置 WEBDAV_*）
+  --keep N    保留最近 N 个本地备份文件，删除更旧的
 
 流程：
   1. 获取任务锁
@@ -120,14 +122,17 @@ JSON 事件类型规范：
   3. 跳过不存在的目录，emit skip 事件
   4. 构建 tar 相对路径列表
   5. tar -czf → emit progress → emit done/error
-  6. 释放锁
+  6. (可选) webdav_upload → emit progress
+  7. (可选) _cleanup_old_backups → emit progress
+  8. 释放锁
 
 输出事件：
-  start → progress → ok/skip → done
+  start → progress → ok/skip → (upload progress) → (cleanup progress) → done
 
 错误处理：
   - 不存在目录 → skip 事件，继续
   - tar 失败 → error 事件，返回 1
+  - WebDAV 上传失败 → error 事件，不阻断 done 输出
 ```
 
 ### 3.5 `engine/restore.sh` — 还原
@@ -217,17 +222,30 @@ engine/engine.sh
 | backup.sh | — | tar 打包逻辑 | customize_app + 全部 TUI 渲染 |
 | restore.sh | list_apps_in_backup/backup_size_mb/app_archive_paths | tar 解压 + docker 启停 | 全部 TUI |
 | deploy.sh | — | .env 符号链接 + docker compose 管理 | 全部 TUI |
-| install.sh | — | — | 全部（全局命令安装不再需要） |
-| dsctl | — | — | 全部（主菜单 + 路由不再需要） |
+| install.sh | — | — | 已删除（dsctl 已移除） |
+| dsctl | — | — | 已删除（引擎取代） |
 
 ## 7. WebDAV 集成
 
-暂不将 WebDAV 上传嵌入 `cmd_backup`（保持独立调用）。原因：
-- WebDAV 上传是异步耗时操作，应独立调用
-- 备份成功但 WebDAV 失败不应标记整体失败
-- Web 后端可先调 backup，再调 webdav_upload 函数
+备份后可通过 `--upload` 标志自动上传到 WebDAV：
 
-后续可加 `cmd_backup --upload` 选项。
+```bash
+sudo engine.sh backup --upload homeassistant
+```
+
+也可独立调用 lib/webdav.sh 函数：
+
+```bash
+source scripts/lib/webdav.sh
+webdav_upload backups/file.tar.gz file.tar.gz
+webdav_list
+webdav_download file.tar.gz backups/file.tar.gz
+```
+
+设计原则：
+- WebDAV 上传是异步耗时操作，但 `--upload` 标志将其内联到备份流程末尾
+- 备份成功但 WebDAV 上传失败 → 不标记整体失败，emit error 后仍然输出 done
+- `--keep N` 可配合 `--upload` 使用：本地 + 远程双副本，本地自动轮转
 
 ## 8. 权限模型
 

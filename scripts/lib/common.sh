@@ -52,7 +52,7 @@ confirm() {
     done
 }
 
-# 统一退出标志：TUI 中途按 q 退出时置 1，dsctl 据此跳过 press_enter 避免"双重回车"
+# 统一退出标志：TUI 中途按 q 退出时置 1，调用方据此跳过 press_enter 避免"双重回车"
 _tui_cancelled=0
 
 press_enter() {

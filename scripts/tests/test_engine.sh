@@ -206,6 +206,14 @@ fi
 
 # 5c: 不存在的应用
 _assert_exit "backup nonexistent 返回 1" 1 "$ENGINE" backup "nonexistent_app_12345"
+
+# 5d: --keep 选项
+echo "  [5d] --keep 选项"
+_assert_exit "backup --keep 无数字参数返回 1" 1 "$ENGINE" backup "--keep" "$_test_app"
+
+# 5e: --upload 前提条件（无 WebDAV 配置时）
+_assert_contains "backup --upload 未配置 WebDAV 报错" \
+    "$("$ENGINE" backup "--upload" "$_test_app" 2>/dev/null || true)" "WebDAV"
 echo
 
 # ════════════════════════════════════════════════════════════
@@ -270,6 +278,19 @@ fi
 # 7c: 不存在的应用
 deploy_out=$("$ENGINE" deploy "nonexistent_app_12345" 2>/dev/null || true)
 _assert_contains "deploy 不存在应用含 skip 事件" "$deploy_out" "skip"
+
+# 7d: deploy 正常流程（仅在 docker compose 可用且有应用时）
+if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; then
+    deploy_out=""
+    set +e; deploy_out=$("$ENGINE" deploy "$_test_app" 2>/dev/null); set -e
+    deploy_events=$(echo "$deploy_out" | while read -r line; do
+        echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['type'])" 2>/dev/null || true
+    done)
+    _assert_contains "deploy 含 start 事件" "$deploy_events" "start"
+    _assert_contains "deploy 含 done 事件" "$deploy_events" "done"
+else
+    echo "  - 跳过 deploy 集成测试（无 docker compose）"
+fi
 echo
 
 # ════════════════════════════════════════════════════════════
@@ -343,6 +364,72 @@ for fn in discover_apps get_backup_dirs get_description parse_volumes \
         FAIL=$((FAIL + 1))
     fi
 done
+echo
+
+# ════════════════════════════════════════════════════════════
+#  11. WebDAV 集成测试
+# ════════════════════════════════════════════════════════════
+echo "[11] WebDAV 集成测试"
+_cleanup
+
+# 加载 WebDAV 配置
+if [[ -f "${ROOT}/global.env" ]]; then
+    set -a; source "${ROOT}/global.env"; set +a
+fi
+
+# 加载 webdav 模块
+source "${ROOT}/scripts/lib/webdav.sh"
+
+# 11a: webdav_configured
+_assert_eq "webdav_configured 检测" \
+    "$(webdav_configured && echo yes || echo no)" "yes"
+
+# 11b: webdav_connection_test
+printf "  "
+if webdav_connection_test; then
+    echo "✓ WebDAV 连接成功"
+    PASS=$((PASS + 1))
+
+    # 11c: 上传测试文件
+    test_file="${ROOT}/backups/_webdav_test_upload.tar.gz"
+    echo "test" > /tmp/_test_content
+    tar -czf "$test_file" -C /tmp _test_content 2>/dev/null || true
+    rm -f /tmp/_test_content
+
+    if [[ -f "$test_file" ]]; then
+        if webdav_upload "$test_file" "_webdav_test_upload.tar.gz"; then
+            echo "  ✓ webdav_upload 成功"
+            PASS=$((PASS + 1))
+        else
+            echo "  ✗ webdav_upload 失败"
+            FAIL=$((FAIL + 1))
+        fi
+
+        # 11d: 列出远程文件
+        remote_list=$(webdav_list 2>/dev/null || true)
+        _assert_contains "webdav_list 含测试文件" "$remote_list" "_webdav_test_upload"
+
+        # 11e: 下载验证
+        dl_path="${ROOT}/backups/_webdav_test_download.tar.gz"
+        if webdav_download "_webdav_test_upload.tar.gz" "$dl_path"; then
+            echo "  ✓ webdav_download 成功"
+            PASS=$((PASS + 1))
+            # 清理远程测试文件
+            curl -s -X DELETE --max-time 10 \
+                -u "${WEBDAV_USER}:${WEBDAV_PASS}" \
+                "${WEBDAV_URL%/}/_webdav_test_upload.tar.gz" &>/dev/null || true
+        else
+            echo "  ✗ webdav_download 失败"
+            FAIL=$((FAIL + 1))
+        fi
+        rm -f "$dl_path"
+        rm -f "$test_file"
+    else
+        echo "  - 跳过: 无法创建测试文件"
+    fi
+else
+    echo "  - 跳过: WebDAV 不可达"
+fi
 echo
 
 # ════════════════════════════════════════════════════════════

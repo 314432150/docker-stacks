@@ -59,10 +59,12 @@
 
 ### 调用
 ```bash
-./engine.sh backup <app1> [app2 app3 ...]
+./engine.sh backup [--upload] [--keep N] <app1> [app2 app3 ...]
 ```
 
 ### 输入
+- `--upload`：可选，备份后自动上传到 WebDAV（需配置 WEBDAV_*）
+- `--keep N`：可选，保留最近 N 个本地备份，删除更旧的
 - 位置参数：应用名列表（至少 1 个）
 - 来自 lib/discover.sh：`get_backup_dirs <app>` 获取每个 app 的可备份目录
 - 来自 lib/state.sh：`select_all_recommended` 自动勾选推荐目录
@@ -109,6 +111,28 @@
 ```
 {BACKUP_ROOT}/{timestamp}_{app1}_{app2}.tar.gz
 timestamp = date +%Y%m%d-%H%M%S
+```
+
+### --upload 事件
+```jsonl
+{"type":"start","op":"backup","file":"...","apps":["app1"]}
+{"type":"progress","step":"打包 3 个目录","current":1,"total":1}
+{"type":"ok","app":"..."}
+{"type":"progress","step":"上传 ... 到 WebDAV"}
+{"type":"progress","step":"WebDAV 上传成功"}
+{"type":"done","file":"...","size":"...","path":"..."}
+```
+
+WebDAV 上传失败时：
+```jsonl
+{"type":"error","msg":"WebDAV 上传失败"}
+{"type":"done",...}
+```
+→ 退出码仍为 0（备份本地已成功）
+
+### --keep N 事件
+```jsonl
+{"type":"progress","step":"清理旧备份: old_file.tar.gz"}
 ```
 
 ### 边界情况

@@ -8,54 +8,32 @@ NAS 上运行的 Docker Compose 服务编排仓库，部署在 `/srv/docker-stac
 docker-stacks/
 ├── global.env               # 全局环境变量，所有 stack 的 .env 通过符号链接指向此文件
 ├── scripts/
-│   ├── dsctl                 # 主入口，可注册为全局命令 dsctl
-│   └── lib/                  # 功能模块（按职责拆分）
-│       ├── common.sh         #   终端颜色、工具函数
-│       ├── discover.sh       #   应用发现、卷解析
-│       ├── state.sh          #   备份选中状态管理
-│       ├── backup.sh         #   交互式备份
-│       ├── restore.sh        #   交互式还原
-│       ├── deploy.sh         #   交互式部署
-│       └── install.sh        #   安装/卸载全局命令
+│   ├── engine/              # 引擎层（JSONL 事件流，供 Web 后端调用）
+│   │   ├── engine.sh        #   入口 + 路由
+│   │   ├── _lib.sh          #   共享基础设施（锁、事件输出）
+│   │   ├── discover.sh      #   应用发现
+│   │   ├── backup.sh        #   备份
+│   │   ├── restore.sh       #   还原
+│   │   └── deploy.sh        #   部署
+│   ├── lib/                 # 纯函数库
+│   │   ├── common.sh        #   终端颜色、工具函数
+│   │   ├── discover.sh      #   应用发现、卷解析
+│   │   ├── state.sh         #   备份选中状态管理
+│   │   └── webdav.sh        #   WebDAV 上传/下载/列表
+│   └── tests/
+│       └── test_engine.sh   # 引擎集成测试
 ├── backups/                 # 备份输出目录，不进 Git
 │
 └── stacks/                  # 9 个 Docker Compose 应用
     ├── homeassistant/       # 智能家居
-    │   ├── compose.yml
-    │   ├── .env             # symlink → ../../global.env
-    │   └── data/config/
     ├── jellyfin/            # 媒体服务器
-    │   ├── compose.yml
-    │   ├── .env
-    │   └── data/{cache,config}/
     ├── lucky/               # DDNS / 反向代理 / SSL 证书
-    │   ├── compose.yml
-    │   ├── .env
-    │   └── data/conf/
     ├── metacubex/           # 代理（Mihomo / Clash Meta）
-    │   ├── compose.yml
-    │   ├── .env
-    │   └── data/mihomo/
     ├── metatube/            # 元数据刮削
-    │   ├── compose.yml
-    │   ├── .env
-    │   └── data/config/
     ├── mosquitto/           # MQTT 消息代理
-    │   ├── compose.yml
-    │   ├── .env
-    │   └── data/{config,data}/
     ├── openclaw/            # 聊天机器人框架
-    │   ├── compose.yml
-    │   ├── .env
-    │   └── data/{auth,config}/
     ├── vaultwarden/         # 密码管理器（Bitwarden 兼容）
-    │   ├── compose.yml
-    │   ├── .env
-    │   └── data/
     └── xunlei/              # 迅雷下载
-        ├── compose.yml
-        ├── .env
-        └── data/{cache,data}/
 ```
 
 ## 快速开始
@@ -69,77 +47,49 @@ cd /srv/docker-stacks
 # 2. 修改环境变量（按需调整 NAS_IP、存储路径等）
 vim global.env
 
-# 3. 安装为全局命令
-bash scripts/dsctl --install
-
-# 4. 部署所有应用（默认全选，支持交互式勾选）
-sudo dsctl deploy
+# 3. 部署所有应用
+sudo bash scripts/engine/engine.sh deploy homeassistant jellyfin lucky metacubex metatube mosquitto openclaw vaultwarden xunlei
 ```
-> 部署会自动创建/修复 .env → global.env 符号链接，然后逐应用 docker compose up -d。
->
-> 恢复旧 NAS 数据：先导入备份文件，再通过 `sudo dsctl restore` 还原。
 
-## 入口说明
+## 引擎命令
 
-| 方式 | 命令 | 适用场景 |
-|------|------|----------|
-| 命令行 | `cd stacks/jellyfin && sudo docker compose up -d` | 启动/管理单个服务 |
-| 全局命令 | `sudo dsctl` | 主菜单（备份 / 还原 / 部署） |
-| 全局命令 | `sudo dsctl deploy` | 快速部署全部/选中应用 |
-
-> 修改根 `global.env` 后所有 stack 自动生效（符号链接）。
-
-
-
-## 备份、还原与部署
-
-零依赖，纯 Bash 实现。
-
-### 全局命令（推荐）
-
-安装后可在任意目录使用：
+引擎以 JSONL 事件流输出，可通过 `sudo` 以 root 权限运行以完整备份所有文件。
 
 ```bash
-# 主菜单（备份 / 还原 / 部署 / 安装 / 卸载）
-sudo dsctl
+# 发现所有应用（JSON 列表）
+sudo bash scripts/engine/engine.sh discover
 
-# 直接进入备份模式
-sudo dsctl backup
+# 备份指定应用
+sudo bash scripts/engine/engine.sh backup homeassistant jellyfin
 
-# 非交互式一键备份全部推荐项
-sudo dsctl backup -y
+# 从备份还原
+sudo bash scripts/engine/engine.sh restore backups/20260711-031727_homeassistant.tar.gz homeassistant
 
-# 直接进入还原模式
-sudo dsctl restore
-
-# 直接进入部署模式（默认全选，可交互式勾选）
-sudo dsctl deploy
-
-# 一键部署全部应用
-sudo dsctl deploy -y
+# 部署应用
+sudo bash scripts/engine/engine.sh deploy homeassistant jellyfin
 ```
 
+> 退出码：0=成功, 1=参数错误, 2=锁冲突, 3=前置条件不满足
 
+## 权限模型
 
-**功能亮点：**
-- 自动发现 `stacks/` 下所有应用，无需手动维护应用列表
-- 解析 `compose.yml` 卷挂载，智能区分 配置数据 / 缓存 / 外部挂载
-- 每个应用预选推荐备份项（跳过缓存目录），可自由勾选
-- 还原时列出所有历史备份，自由选择要还原的应用
-- 备份格式：`{时间戳}_{描述}_{应用列表}.tar.gz`，如 `20260710-045320_test_homeassistant_jellyfin_...tar.gz`
-- 支持远程 WebDAV 备份/还原（坚果云、Nextcloud、群晖等）
+引擎代码不含任何 `sudo` 调用，权限完全由调用方 EUID 决定：
 
+| 启动方式 | 能备份 root 文件 | 能还原文件所有者 |
+|---------|:---------------:|:-------------:|
+| `sudo bash engine.sh ...` | ✓ | ✓ |
+| `bash engine.sh ...`（普通用户） | ✗ | ✗ |
+
+建议始终以 `sudo` 启动引擎。
 
 ## 远程 WebDAV 备份
 
-dsctl 支持将备份文件上传到远程 WebDAV 服务器，以及从远程 WebDAV 下载还原。
-
 ### 配置
 
-在 `global.env` 中设置以下变量：
+在 `global.env` 中设置：
 
 ```bash
-WEBDAV_URL=https://your-webdav-server.com/path/to/backups
+WEBDAV_URL=https://your-webdav-server.com/path
 WEBDAV_USER=your_username
 WEBDAV_PASS=your_password
 ```
@@ -147,29 +97,30 @@ WEBDAV_PASS=your_password
 ### 坚果云 配置示例
 
 1. 登录 [坚果云](https://www.jianguoyun.com/)
-2. 进入 **账户信息 → 安全选项 → 第三方应用管理**
-3. 添加一个应用，生成专用密码
-4. 在坚果云中创建一个目录（如 `/backups`），用于存放备份文件
-5. 在 `global.env` 中配置：
+2. 进入 **账户信息 → 安全选项 → 第三方应用管理**，添加应用，生成专用密码
+3. 在坚果云中创建目录，填入 `global.env` 即可
 
-```bash
-WEBDAV_URL=https://dav.jianguoyun.com/dav/backups
-WEBDAV_USER=你的坚果云邮箱
-WEBDAV_PASS=第三方应用专用密码
-```
-
-> ⚠️ **安全提示**：`WEBDAV_PASS` 是敏感信息。如果仓库需要公开，建议将 `global.env` 加入 `.gitignore`，或用单独的不受版本控制的凭据文件。
+> ⚠️ **安全提示**：`global.env` 含敏感凭据，不进 Git（`.gitignore` 已忽略）。仓库提供 `global.env.example` 模板。
 
 ### 使用
 
-```bash
-# 备份：打包完成后会询问是否上传到 WebDAV
-sudo dsctl backup
+WebDAV 函数通过 `lib/webdav.sh` 暴露，可在脚本中调用：
 
-# 还原：可选择「本地备份」或「远程 WebDAV 备份」
-sudo dsctl restore
+```bash
+source scripts/lib/webdav.sh
+
+# 上传
+webdav_upload backups/file.tar.gz file.tar.gz
+
+# 列出远程文件
+webdav_list
+
+# 下载
+webdav_download file.tar.gz backups/file.tar.gz
 ```
 
-- 备份时，本地 `.tar.gz` 始终保留，WebDAV 上传为额外副本
-- 还原时，从 WebDAV 下载的文件会缓存到本地 `backups/` 目录
+## 运行测试
 
+```bash
+bash scripts/tests/test_engine.sh
+```

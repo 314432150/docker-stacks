@@ -29,13 +29,69 @@ _build_backup_paths() {
     done
 }
 
+# ── 备份清理：保留最近 N 个备份文件 ──
+_cleanup_old_backups() {
+    local keep="$1"
+    [[ "$keep" -le 0 ]] && return 0
+
+    local files=()
+    local f
+    while IFS= read -r f; do
+        files+=("$f")
+    done < <(ls -1t "${BACKUP_ROOT}"/*.tar.gz 2>/dev/null || true)
+
+    if [[ ${#files[@]} -le $keep ]]; then
+        return 0
+    fi
+
+    for (( i = keep; i < ${#files[@]}; i++ )); do
+        local old="${files[$i]}"
+        local name; name="$(basename "$old")"
+        rm -f "$old" 2>/dev/null || true
+        _emit "{\"type\":\"progress\",\"step\":\"清理旧备份: ${name}\"}"
+    done
+}
+
 # ── 子命令入口 ──
 cmd_backup() {
-    local apps=("$@")
+    local do_upload=false
+    local keep_count=0
+    local apps=()
+
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --upload) do_upload=true; shift ;;
+            --keep)
+                keep_count="${2:-0}"
+                if [[ ! "$keep_count" =~ ^[0-9]+$ ]] || [[ "$keep_count" -lt 0 ]]; then
+                    _emit '{"type":"error","msg":"--keep 后必须是非负整数"}'
+                    return 1
+                fi
+                shift 2 ;;
+            --*)
+                _emit "{\"type\":\"error\",\"msg\":\"未知选项: $1\"}"
+                return 1 ;;
+            *)
+                apps+=("$1"); shift ;;
+        esac
+    done
 
     if [[ ${#apps[@]} -eq 0 ]]; then
         _emit '{"type":"error","msg":"未指定要备份的应用"}'
         return 1
+    fi
+
+    # 验证 --upload 前提条件
+    if [[ "$do_upload" == "true" ]]; then
+        if ! webdav_configured; then
+            _emit '{"type":"error","msg":"--upload 需要配置 WebDAV（WEBDAV_URL/USER/PASS）"}'
+            return 1
+        fi
+        if ! webdav_connection_test; then
+            _emit '{"type":"error","msg":"--upload 失败: WebDAV 连接不可达"}'
+            return 1
+        fi
     fi
 
     # 任务锁
@@ -84,6 +140,25 @@ cmd_backup() {
     local error_file; error_file="$(mktemp)"
     if tar -czf "$archive" -C "$ROOT" "${paths[@]}" 2>"$error_file"; then
         local size; size="$(du -h "$archive" 2>/dev/null | cut -f1)"
+        _emit "{\"type\":\"ok\",\"app\":\"${archive_name}\"}"
+
+        # ── 上传到 WebDAV ──
+        local upload_ok=true
+        if [[ "$do_upload" == "true" ]]; then
+            _emit "{\"type\":\"progress\",\"step\":\"上传 ${archive_name} 到 WebDAV\"}"
+            if webdav_upload "$archive" "$archive_name"; then
+                _emit "{\"type\":\"progress\",\"step\":\"WebDAV 上传成功\"}"
+            else
+                _emit "{\"type\":\"error\",\"msg\":\"WebDAV 上传失败\"}"
+                upload_ok=false
+            fi
+        fi
+
+        # ── 清理旧备份 ──
+        if [[ "$keep_count" -gt 0 ]]; then
+            _cleanup_old_backups "$keep_count"
+        fi
+
         _emit "{\"type\":\"done\",\"file\":\"${archive_name}\",\"size\":\"${size}\",\"path\":\"${archive}\"}"
         rm -f "$error_file"
         return 0
