@@ -1,0 +1,16 @@
+{
+  "name": "ds-web-server",
+  "version": "0.1.0",
+  "description": "docker-stacks Web Backend — 引擎桥接 + REST API + SSE",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/app.js",
+    "start": "node src/app.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0"
+  },
+  "devDependencies": {}
+}
