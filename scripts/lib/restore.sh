@@ -6,9 +6,9 @@
 list_apps_in_backup() {
     local bp="$1"
     if [[ -n "${_TAR_CACHE:-}" ]]; then
-        echo "$_TAR_CACHE" | grep -oP '(?:stacks|dockge)/[^/]+' | sed 's|^stacks/||' | sort -u || true
+        echo "$_TAR_CACHE" | grep -o 'stacks/[^/]\+' | sed 's|^stacks/||' | sort -u || true
     else
-        tar -tzf "$bp" 2>/dev/null | grep -oP '(?:stacks|dockge)/[^/]+' | sed 's|^stacks/||' | sort -u || true
+        tar -tzf "$bp" 2>/dev/null | grep -o 'stacks/[^/]\+' | sed 's|^stacks/||' | sort -u || true
     fi
 }
 
@@ -196,7 +196,7 @@ interactive_restore() {
     local backup_apps=()
     while IFS= read -r aname; do
         [[ -n "$aname" ]] || continue
-        if [[ -d "${ROOT}/stacks/${aname}" ]] || [[ "$aname" == "dockge" ]]; then
+        if [[ -d "${ROOT}/stacks/${aname}" ]]; then
             backup_apps+=("$aname")
         fi
     done < <(list_apps_in_backup "$selected_backup")
@@ -388,7 +388,6 @@ interactive_restore() {
     local has_existing=0
     for name in "${restore_selected[@]}"; do
         local target_dir="${ROOT}/stacks/${name}"
-        [[ "$name" == "dockge" ]] && target_dir="${ROOT}/dockge"
         if [[ -d "$target_dir" ]] && [[ -n "$(ls -A "$target_dir" 2>/dev/null)" ]]; then
             has_existing=1; break
         fi
@@ -442,9 +441,7 @@ interactive_restore() {
         echo
         section "停止容器"
         for name in "${restore_selected[@]}"; do
-            local compose_dir
-            if [[ "$name" == "dockge" ]]; then compose_dir="${ROOT}/dockge"
-            else compose_dir="${ROOT}/stacks/${name}"; fi
+            local compose_dir="${ROOT}/stacks/${name}"
             if [[ -f "${compose_dir}/compose.yml" ]]; then
                 local running
                 running=$(cd "$compose_dir" && docker compose ps --status=running -q 2>/dev/null)
@@ -471,7 +468,6 @@ interactive_restore() {
     local success=0 fail=0
     for name in "${restore_selected[@]}"; do
         local app_path="stacks/${name}"
-        [[ "$name" == "dockge" ]] && app_path="dockge"
         printf "  ${BLUE}⏳${NC} 解压 ${BOLD}${name}${NC} ... "
         if tar -xzf "$selected_backup" -C "$ROOT" "$app_path" 2>/dev/null; then
             echo -e "${GREEN}✓${NC}"; ((success++)) || true
@@ -488,9 +484,7 @@ interactive_restore() {
         echo
         section "启动容器"
         for name in "${restore_selected[@]}"; do
-            local compose_dir
-            if [[ "$name" == "dockge" ]]; then compose_dir="${ROOT}/dockge"
-            else compose_dir="${ROOT}/stacks/${name}"; fi
+            local compose_dir="${ROOT}/stacks/${name}"
             if [[ ! -f "${compose_dir}/compose.yml" ]]; then
                 echo -e "  ${DIM}·${NC} ${name} ${DIM}(无 compose.yml，跳过)${NC}"
                 continue

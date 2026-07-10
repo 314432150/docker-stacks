@@ -10,7 +10,7 @@
 _list_apps_in_backup() {
     local archive="$1"
     tar -tzf "$archive" 2>/dev/null | \
-        grep -oP '(?:stacks|dockge)/[^/]+' | \
+        grep -o 'stacks/[^/]\+' | \
         sed 's|^stacks/||' | sort -u || true
 }
 
@@ -18,7 +18,6 @@ _list_apps_in_backup() {
 _app_archive_paths() {
     local archive="$1" app="$2"
     local prefix="stacks/${app}/"
-    [[ "$app" == "dockge" ]] && prefix="dockge/"
 
     tar -tzf "$archive" 2>/dev/null | \
         grep "^${prefix}" | \
@@ -30,7 +29,6 @@ _pre_restore_backup() {
     local archive="$1" app="$2"
 
     local app_path="stacks/${app}"
-    [[ "$app" == "dockge" ]] && app_path="dockge"
 
     local target="${ROOT}/${app_path}"
     if [[ ! -d "$target" ]] || [[ -z "$(ls -A "$target" 2>/dev/null)" ]]; then
@@ -59,7 +57,6 @@ _pre_restore_backup() {
 _docker_stop() {
     local app="$1"
     local compose_dir="${ROOT}/stacks/${app}"
-    [[ "$app" == "dockge" ]] && compose_dir="${ROOT}/dockge"
 
     if [[ ! -f "${compose_dir}/compose.yml" ]]; then return 0; fi
     if ! command -v docker &>/dev/null || ! docker compose version &>/dev/null 2>&1; then
@@ -78,7 +75,6 @@ _docker_stop() {
 _docker_start() {
     local app="$1"
     local compose_dir="${ROOT}/stacks/${app}"
-    [[ "$app" == "dockge" ]] && compose_dir="${ROOT}/dockge"
 
     if [[ ! -f "${compose_dir}/compose.yml" ]]; then return 0; fi
     if ! command -v docker &>/dev/null || ! docker compose version &>/dev/null 2>&1; then
@@ -130,7 +126,6 @@ cmd_restore() {
 
         # 3. 解压（--same-owner 需要 root 才能恢复文件所有者）
         local app_path="stacks/${app}"
-        [[ "$app" == "dockge" ]] && app_path="dockge"
 
         _emit "{\"type\":\"progress\",\"step\":\"解压 ${app}\",\"current\":$((success + fail + 1)),\"total\":${#apps[@]}}"
 

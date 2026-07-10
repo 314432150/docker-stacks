@@ -273,12 +273,7 @@ interactive_backup() {
         [[ -n "$name" ]] || continue
         while IFS= read -r d; do
             [[ -n "$d" ]] || continue
-            local src_dir
-            if [[ "$name" == "dockge" ]]; then
-                src_dir="${ROOT}/dockge/${d}"
-            else
-                src_dir="${ROOT}/stacks/${name}/${d}"
-            fi
+            local src_dir="${ROOT}/stacks/${name}/${d}"
             local exists
             if [[ -d "$src_dir" ]]; then exists="${GREEN}✓ 存在${NC}"
             else exists="${RED}✗ 不存在${NC}"; fi
@@ -352,9 +347,7 @@ interactive_backup() {
         while IFS= read -r drel; do
             [[ -n "$drel" ]] || continue
 
-            local app_rel
-            if [[ "$name" == "dockge" ]]; then app_rel="dockge"
-            else app_rel="stacks/${name}"; fi
+            local app_rel="stacks/${name}"
             local src="${ROOT}/${app_rel}/${drel}"
             if [[ ! -d "$src" ]]; then
                 echo -e "  ${RED}✗${NC} [${name}] ${drel} — 目录不存在，跳过"

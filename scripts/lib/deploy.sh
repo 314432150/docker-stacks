@@ -196,9 +196,7 @@ interactive_deploy() {
         echo
         section "检查环境配置"
         for name in "${deploy_selected[@]}"; do
-            local compose_dir
-            if [[ "$name" == "dockge" ]]; then compose_dir="${ROOT}/dockge"
-            else compose_dir="${ROOT}/stacks/${name}"; fi
+            local compose_dir="${ROOT}/stacks/${name}"
 
             local env_link="${compose_dir}/.env"
             if [[ ! -L "$env_link" ]] || [[ "$(readlink -f "$env_link" 2>/dev/null)" != "$global_env" ]]; then
@@ -218,9 +216,7 @@ interactive_deploy() {
     section "检查运行中容器"
     local stopped=0
     for name in "${deploy_selected[@]}"; do
-        local compose_dir
-        if [[ "$name" == "dockge" ]]; then compose_dir="${ROOT}/dockge"
-        else compose_dir="${ROOT}/stacks/${name}"; fi
+        local compose_dir="${ROOT}/stacks/${name}"
 
         if [[ ! -f "${compose_dir}/compose.yml" ]]; then
             continue
@@ -247,9 +243,7 @@ interactive_deploy() {
     local success=0 fail=0
 
     for name in "${deploy_selected[@]}"; do
-        local compose_dir
-        if [[ "$name" == "dockge" ]]; then compose_dir="${ROOT}/dockge"
-        else compose_dir="${ROOT}/stacks/${name}"; fi
+        local compose_dir="${ROOT}/stacks/${name}"
 
         if [[ ! -f "${compose_dir}/compose.yml" ]]; then
             echo -e "  ${DIM}·${NC} ${name} ${DIM}(无 compose.yml，跳过)${NC}"

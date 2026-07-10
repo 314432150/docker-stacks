@@ -20,9 +20,7 @@ _build_backup_paths() {
     done < <(get_backup_dirs "$name")
 
     for d in "${dirs[@]}"; do
-        local app_rel
-        if [[ "$name" == "dockge" ]]; then app_rel="dockge"
-        else app_rel="stacks/${name}"; fi
+        local app_rel="stacks/${name}"
 
         local full_path="${ROOT}/${app_rel}/${d}"
         [[ -d "$full_path" ]] && echo "${app_rel}/${d}|ok" || echo "${d}|skip"

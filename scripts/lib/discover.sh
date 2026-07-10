@@ -13,10 +13,6 @@ discover_apps() {
         fi
         echo "${name}"
     done
-    # dockge
-    if [[ -f "${ROOT}/dockge/compose.yml" ]]; then
-        echo "dockge"
-    fi
 }
 
 # 从 compose.yml 提取可备份目录
@@ -67,12 +63,7 @@ parse_volumes() {
 
 get_backup_dirs() {
     local name="$1"
-    local compose_file
-    if [[ "$name" == "dockge" ]]; then
-        compose_file="${ROOT}/dockge/compose.yml"
-    else
-        compose_file="${ROOT}/stacks/${name}/compose.yml"
-    fi
+    local compose_file="${ROOT}/stacks/${name}/compose.yml"
 
     if [[ -f "$compose_file" ]]; then
         parse_volumes "$compose_file"
@@ -81,12 +72,7 @@ get_backup_dirs() {
 
 get_description() {
     local name="$1"
-    local compose_file
-    if [[ "$name" == "dockge" ]]; then
-        compose_file="${ROOT}/dockge/compose.yml"
-    else
-        compose_file="${ROOT}/stacks/${name}/compose.yml"
-    fi
+    local compose_file="${ROOT}/stacks/${name}/compose.yml"
 
     if [[ -f "$compose_file" ]]; then
         grep -m1 -E '^[[:space:]]*#[[:space:]]*=+' "$compose_file" 2>/dev/null | \

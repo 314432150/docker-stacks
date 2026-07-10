@@ -30,12 +30,7 @@ cmd_discover() {
             $dir_first || echo -n ','
             dir_first=false
 
-            local check_path
-            if [[ "$name" == "dockge" ]]; then
-                check_path="${ROOT}/dockge/${src}"
-            else
-                check_path="${ROOT}/stacks/${name}/${src}"
-            fi
+            local check_path="${ROOT}/stacks/${name}/${src}"
 
             local exists=false
             [[ -d "$check_path" ]] && exists=true
