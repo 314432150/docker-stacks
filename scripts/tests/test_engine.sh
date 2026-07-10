@@ -61,14 +61,22 @@ _assert_contains() {
     fi
 }
 
+# 清理残留（每次测试前）
+_cleanup() {
+    rm -f "${ROOT}/.cache/engine.lock" 2>/dev/null || true
+    rm -f /tmp/docker-stacks-engine/engine.lock 2>/dev/null || true
+    rm -f "${ROOT}/backups"/2026*openclaw* "${ROOT}/backups"/_test_* 2>/dev/null || true
+    rm -rf "${ROOT}/backups"/pre_restore_* 2>/dev/null || true
+}
+
 echo "============================================================"
 echo "  Engine 集成测试"
 echo "============================================================"
 echo
 
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 #  1. 语法检查
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 echo "[1] 脚本语法检查"
 for f in "${ENGINE}" "${ROOT}"/scripts/engine/_lib.sh \
          "${ROOT}"/scripts/engine/discover.sh \
@@ -85,9 +93,9 @@ for f in "${ENGINE}" "${ROOT}"/scripts/engine/_lib.sh \
 done
 echo
 
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 #  2. engine.sh 存在性 + 可执行权限
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 echo "[2] engine.sh 可执行"
 if [[ -x "$ENGINE" ]]; then
     echo "  ✓ engine.sh is executable"
@@ -98,30 +106,37 @@ else
 fi
 echo
 
-# ═══════════════════════════════════════════
-#  3. 无参数 / 未知子命令
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
+#  3. 无参数 / 未知子命令 / --help / --no-sudo
+# ════════════════════════════════════════════════════════════
 echo "[3] 入口参数验证"
+_cleanup
 _assert_exit "无参数返回 1" 1 "$ENGINE"
 _assert_exit "未知子命令返回 1" 1 "$ENGINE" "unknown_cmd"
 _assert_exit "--help 返回 0" 0 "$ENGINE" "--help"
+_assert_exit "--no-sudo backup 无参数返回 1" 1 "$ENGINE" "--no-sudo" "backup"
 echo
 
-# ═══════════════════════════════════════════
-#  4. discover — 应用发现
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
+#  4. discover — 应用发现（含权限信息）
+# ════════════════════════════════════════════════════════════
 echo "[4] discover 子命令"
+_cleanup
 
 out=$("$ENGINE" discover 2>/dev/null || true)
 _assert_exit "discover 返回 0" 0 "$ENGINE" "discover"
 _assert_json_has "discover 输出含 type" "$out" "type"
 _assert_json_has "discover 输出含 apps" "$out" "apps"
+_assert_json_has "discover 输出含 engine" "$out" "engine"
 
-# 验证 apps 是数组
+# 验证 apps 是数组+数据结构完整
 apps_check=$(echo "$out" | python3 -c "
 import sys, json
 d = json.loads(sys.stdin.read())
 assert d['type'] == 'apps'
+assert 'engine' in d, 'missing engine block'
+assert 'privilege' in d['engine'], 'missing privilege'
+assert 'sudo' in d['engine'], 'missing sudo flag'
 assert isinstance(d['apps'], list)
 for app in d['apps']:
     assert 'name' in app
@@ -139,32 +154,29 @@ _assert_eq "discover 数据结构完整" "$apps_check" "OK"
 # 至少有 1 个应用
 app_count=$(echo "$out" | python3 -c "import sys,json; print(len(json.loads(sys.stdin.read())['apps']))" 2>/dev/null || echo 0)
 _assert_eq "discover 发现至少 1 个应用" "$([[ $app_count -ge 1 ]] && echo ok || echo fail)" "ok"
+
+# 权限级别在 {root,sudo,user} 中
+priv=$(echo "$out" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['engine']['privilege'])" 2>/dev/null)
+_assert_eq "discover privilege 在合法集合" "$([[ $priv =~ ^(root|sudo|user)$ ]] && echo ok || echo fail)" "ok"
 echo
 
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 #  5. backup — 备份
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 echo "[5] backup 子命令"
+_cleanup
 
 # 5a: 空参数
 _assert_exit "backup 无参数返回 1" 1 "$ENGINE" "backup"
 
-# 5b: 正常备份（优先用 openclaw，其次取 discover 第一个）
+# 5b: 正常备份（用 openclaw — 数据目录用户可读）
 _test_app="openclaw"
-if ! "$ENGINE" discover 2>/dev/null | python3 -c "
+if "$ENGINE" discover 2>/dev/null | python3 -c "
 import sys, json
 apps = json.loads(sys.stdin.read())['apps']
 names = [a['name'] for a in apps]
-assert 'openclaw' in names
+assert '$_test_app' in names
 " 2>/dev/null; then
-    _test_app=$("$ENGINE" discover 2>/dev/null | python3 -c "
-import sys, json
-apps = json.loads(sys.stdin.read())['apps']
-print(apps[0]['name'] if apps else '')
-" 2>/dev/null)
-fi
-
-if [[ -n "$_test_app" ]]; then
     # 一次调用同时拿退出码和输出
     backup_out=""
     backup_exit=0
@@ -179,29 +191,30 @@ if [[ -n "$_test_app" ]]; then
     _assert_contains "backup 含 done 事件" "$events" "done"
 
     # 验证备份文件已创建
-    done_line=$(echo "$backup_out" | grep '"type":"done"' | head -1)
+    done_line=$(echo "$backup_out" | grep '"type":"done"' | head -1 || true)
     backup_path=$(echo "$done_line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('path',''))" 2>/dev/null || true)
     if [[ -f "$backup_path" ]]; then
         echo "  ✓ backup 文件已创建: $(basename "$backup_path")"
         PASS=$((PASS + 1))
-        # 清理测试备份
+        # 清理
         rm -f "$backup_path"
     else
         echo "  ✗ backup 文件未创建: $backup_path"
         FAIL=$((FAIL + 1))
     fi
 else
-    echo "  - 跳过: 无可用应用"
+    echo "  - 跳过: $_test_app 不可用"
 fi
 
 # 5c: 不存在的应用
 _assert_exit "backup nonexistent 返回 1" 1 "$ENGINE" backup "nonexistent_app_12345"
 echo
 
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 #  6. restore — 还原
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 echo "[6] restore 子命令"
+_cleanup
 
 # 6a: 参数不完整
 _assert_exit "restore 无参数返回 1" 1 "$ENGINE" "restore"
@@ -211,18 +224,15 @@ _assert_exit "restore 不存在文件返回 1" 1 "$ENGINE" restore "/tmp/nonexis
 
 # 6c: 正常还原（先 backup 再 restore）
 if [[ -n "${_test_app:-}" ]]; then
-    # 创建一个小备份
     set +e
     "$ENGINE" backup "$_test_app" &>/dev/null
     set -e
 
-    # 查找刚创建的备份
     test_archive=$(ls -1t "${ROOT}/backups"/*.tar.gz 2>/dev/null | head -1)
     if [[ -n "$test_archive" ]] && [[ -f "$test_archive" ]]; then
         restore_out=""
         set +e; restore_out=$("$ENGINE" restore "$test_archive" "$_test_app" 2>/dev/null || true); set -e
 
-        # 验证 JSONL 结构
         events=$(echo "$restore_out" | while read -r line; do
             echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['type'])" 2>/dev/null || true
         done)
@@ -243,34 +253,32 @@ else
 fi
 echo
 
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 #  7. deploy — 部署
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 echo "[7] deploy 子命令"
+_cleanup
 
 # 7a: 空参数
 _assert_exit "deploy 无参数返回 1" 1 "$ENGINE" "deploy"
 
 # 7b: docker compose 不可用时返回 3
-if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; then
+if command -v docker &>/dev/null && ${_SUDO:-} docker compose version &>/dev/null 2>&1; then
     echo "  - docker compose 可用，跳过不可用测试"
 else
     _assert_exit "deploy docker 不可用时返回 3" 3 "$ENGINE" deploy "${_test_app:-openclaw}"
 fi
 
 # 7c: 不存在的应用
-if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; then
-    deploy_out=$("$ENGINE" deploy "nonexistent_app_12345" 2>/dev/null || true)
-    _assert_contains "deploy 不存在应用含 skip 事件" "$deploy_out" "skip"
-else
-    echo "  - docker compose 不可用，结束"
-fi
+deploy_out=$("$ENGINE" deploy "nonexistent_app_12345" 2>/dev/null || true)
+_assert_contains "deploy 不存在应用含 skip 事件" "$deploy_out" "skip"
 echo
 
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 #  8. 任务锁互斥
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 echo "[8] 任务锁互斥"
+_cleanup
 
 _lock_test_app="${_test_app:-openclaw}"
 if "$ENGINE" discover 2>/dev/null | python3 -c "
@@ -279,17 +287,13 @@ apps = json.loads(sys.stdin.read())['apps']
 names = [a['name'] for a in apps]
 assert '$_lock_test_app' in names
 " 2>/dev/null; then
-    # 使用与 engine 相同的锁路径逻辑
-    lock_dir="${ROOT}/.cache"
-    if [[ ! -w "$lock_dir" ]]; then
-        lock_dir="/tmp/docker-stacks-engine"
+    # 使用与 engine 相同的锁路径
+    lock_file="${ROOT}/.cache/engine.lock"
+    if [[ ! -w "${ROOT}/.cache" ]]; then
+        lock_file="/tmp/docker-stacks-engine/engine.lock"
     fi
-    mkdir -p "$lock_dir" 2>/dev/null || true
-    lock_file="${lock_dir}/engine.lock"
+    mkdir -p "$(dirname "$lock_file")" 2>/dev/null || true
     rm -f "$lock_file"
-
-    # 手动创建锁文件模拟并发
-    mkdir -p "$(dirname "$lock_file")"
     echo "99999 test_lock" > "$lock_file"
 
     lock_out=""
@@ -304,32 +308,32 @@ else
 fi
 echo
 
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 #  9. 路径解析
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 echo "[9] 路径解析"
 
-# 从不同目录调用 engine.sh
 pushd /tmp &>/dev/null
 out=$("$ENGINE" discover 2>/dev/null || true)
 popd &>/dev/null
 _assert_contains "从 /tmp 调用 discover 成功" "$out" '"type":"apps"'
 echo
 
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 #  10. lib 函数完整性
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 echo "[10] lib 可复用函数完整性"
 
-# 验证 engine 需要的 lib 函数存在
 LIB="${ROOT}/scripts/lib"
 for fn in discover_apps get_backup_dirs get_description parse_volumes \
           init_state select_all_recommended get_selected_dirs has_any_selected \
           toggle_app is_selected toggle_dir \
           webdav_configured webdav_connection_test webdav_upload \
-          webdav_list webdav_download webdav_file_size; do
+          webdav_list webdav_download webdav_file_size \
+          _sudo_tar_czf _sudo_tar_xzf _sudo_tar_tzf _sudo_mkdir _sudo_rm _sudo_chown; do
+    # 搜索 engine/ 和 lib/ 中的定义
     found=0
-    for f in "$LIB"/*.sh; do
+    for f in "$LIB"/*.sh "${ROOT}/scripts/engine"/*.sh; do
         if grep -q "^${fn}()" "$f" 2>/dev/null; then
             found=1; break
         fi
@@ -344,9 +348,9 @@ for fn in discover_apps get_backup_dirs get_description parse_volumes \
 done
 echo
 
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 #  结果
-# ═══════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 echo "============================================================"
 echo "  测试结果: ${PASS} 通过, ${FAIL} 失败"
 echo "============================================================"

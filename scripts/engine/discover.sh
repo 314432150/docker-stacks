@@ -2,16 +2,21 @@
 #  engine/discover.sh — 应用发现（JSON 输出）
 # ============================================================
 # 依赖: lib/discover.sh (discover_apps, get_backup_dirs, get_description)
+# 输出包含权限级别信息（engine.privilege: root|sudo|user）
 
 cmd_discover() {
-    echo -n '{"type":"apps","apps":['
+    # 权限级别
+    local priv="user"
+    [[ ${EUID:-0} -eq 0 ]] && priv="root"
+    [[ -n "$_SUDO" ]] && priv="sudo"
+
+    echo -n "{\"type\":\"apps\",\"engine\":{\"privilege\":\"${priv}\",\"sudo\":$([[ -n "$_SUDO" ]] && echo true || echo false)},\"apps\":["
     local first=true
 
     while IFS= read -r name; do
         [[ -n "$name" ]] || continue
 
         local desc; desc="$(get_description "$name")"
-        # JSON 字符串转义：\ → \\  ;  " → \"
         desc="${desc//\\/\\\\}"
         desc="${desc//\"/\\\"}"
 
@@ -32,8 +37,13 @@ cmd_discover() {
             else
                 check_path="${ROOT}/stacks/${name}/${src}"
             fi
+
             local exists=false
-            [[ -d "$check_path" ]] && exists=true
+            if [[ -n "$_SUDO" ]]; then
+                $_SUDO test -d "$check_path" 2>/dev/null && exists=true
+            else
+                [[ -d "$check_path" ]] && exists=true
+            fi
 
             local recommended
             if [[ "$is_cache" == "0" ]]; then recommended=true

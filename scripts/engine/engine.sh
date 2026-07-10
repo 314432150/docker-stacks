@@ -52,21 +52,44 @@ source "$ENGINE_DIR/deploy.sh"
 
 # ── 路由 + 主入口 ──
 _main() {
-    local cmd="${1:-}"; shift || true
+    # 预解析 --no-sudo 和 --help
+    local cmd="" args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --no-sudo)
+                _SUDO=""
+                shift ;;
+            -h|--help)
+                cmd="--help"
+                break ;;
+            *)
+                if [[ -z "$cmd" ]]; then
+                    cmd="$1"
+                else
+                    args+=("$1")
+                fi
+                shift ;;
+        esac
+    done
+
+    _emit_startup_info
 
     case "$cmd" in
         discover)  cmd_discover ;;
-        backup)    cmd_backup "$@" ;;
-        restore)   cmd_restore "$@" ;;
-        deploy)    cmd_deploy "$@" ;;
+        backup)    cmd_backup "${args[@]}" ;;
+        restore)   cmd_restore "${args[@]}" ;;
+        deploy)    cmd_deploy "${args[@]}" ;;
         "")
             _emit '{"type":"error","msg":"未指定子命令，用法: engine.sh {discover|backup|restore|deploy} [...]"}'
             return 1 ;;
-        -h|--help)
-            echo "用法: engine.sh {discover|backup|restore|deploy} [参数...]"
+        --help)
+            echo "用法: engine.sh [--no-sudo] {discover|backup|restore|deploy} [参数...]"
+            echo ""
+            echo "选项:"
+            echo "  --no-sudo       禁用 sudo 提权（即使免密可用）"
             echo ""
             echo "子命令:"
-            echo "  discover              扫描所有应用，输出 JSON 列表"
+            echo "  discover              扫描所有应用，输出 JSON 列表（含权限级别）"
             echo "  backup <app...>       备份指定应用 → JSONL 事件流"
             echo "  restore <archive> <app...>  从备份还原指定应用"
             echo "  deploy <app...>       部署指定应用（docker compose up）"

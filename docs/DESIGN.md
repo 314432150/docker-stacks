@@ -60,7 +60,11 @@ scripts/
   - 解析自身路径 → ROOT / LIB_DIR / BACKUP_ROOT
   - 加载 global.env
   - 按依赖顺序 source lib/ → engine/_lib.sh → engine/discover → engine/backup → engine/restore → engine/deploy
+  - 预解析 --no-sudo 标志（在 _SUDO 检测后强制禁用 sudo）
   - 解析 $1 子命令，路由到对应 cmd_* 函数
+
+选项：
+  --no-sudo        禁用 sudo 提权（即使免密可用）
 
 子命令：
   engine.sh discover
@@ -75,16 +79,34 @@ scripts/
   3 = 前置条件不满足（docker 不可用、目录不存在等）
 ```
 
-### 3.2 `engine/_lib.sh` — 引擎共享基础设施
+### 3.2 `engine/_lib.sh` — 引擎共享基础设施 + 权限管理
 
 ```
 函数：
-  _emit <json_string>          — 输出一行 JSON 到 stdout
-  _acquire_lock <op_name>       — 获取任务锁，返回 0/1
-  _release_lock                  — 释放任务锁
+  _emit <json_string>              — 输出一行 JSON 到 stdout
+  _acquire_lock <op_name>           — 获取任务锁，返回 0/1
+  _release_lock                      — 释放任务锁
+  _sudo_tar_czf <archive> <paths>    — 打包（sudo 安全包装）
+  _sudo_tar_xzf <archive> <paths>    — 解压 --same-owner（sudo 安全包装）
+  _sudo_tar_tzf <archive>            — 列出 tar 内容（sudo 安全包装）
+  _sudo_mkdir <dir>                  — 创建目录（sudo 安全包装）
+  _sudo_rm <file>                    — 删除文件（sudo 安全包装）
+  _sudo_chown <user:group> <file>   — 变更所有者（sudo 安全包装）
+  _emit_startup_info                 — 启动时输出权限级别信息（stderr）
 
 常量：
-  LOCK_FILE = $ROOT/.cache/engine.lock
+  _SUDO  = "sudo" | ""              — 权限提升前缀
+  LOCK_FILE = $ROOT/.cache/engine.lock（优先）或 /tmp/docker-stacks-engine/engine.lock（回退）
+
+权限提升检测（_SUDO）：
+  1. EUID==0                   → _SUDO=""（已是 root）
+  2. sudo -n true 成功         → _SUDO="sudo"（免密可用）
+  3. 以上均不满足               → _SUDO=""（普通用户，无特权）
+
+锁目录三级策略：
+  1. _SUDO 可用 → sudo mkdir -p $ROOT/.cache → LOCK_FILE="$ROOT/.cache/engine.lock"
+  2. $ROOT/.cache 目录本用户可写 → 直接使用
+  3. 均不可用 → LOCK_FILE="/tmp/docker-stacks-engine/engine.lock"
 
 JSON 事件类型规范：
   {"type":"start","op":"backup|restore|deploy","file":"...","apps":[...]}
@@ -227,3 +249,75 @@ engine/engine.sh
 - Web 后端可先调 backup，再调 webdav_upload 函数
 
 后续可加 `cmd_backup --upload` 选项。
+
+## 8. 权限模型
+
+### 8.1 问题
+
+Docker 容器通过 bind mount 写入的数据文件通常属于 root（容器内进程以 root 运行）。例如 `homeassistant/data/config/.storage/auth` 属于 root。普通用户无法读取这些文件，导致：
+
+- **备份时**：`tar` 无法读取 root 拥有的文件 → Permission denied
+- **还原时**：`tar -xzf` 无法恢复原始文件所有者 → 文件变为当前用户，权限丢失
+
+### 8.2 方案：引擎自检测 + _SUDO 包装
+
+```
+engine.sh 启动 → 检测 sudo -n 是否可用
+                  ↓
+         _SUDO="sudo"（免密可用） 或 _SUDO=""（不可用）
+                  ↓
+    所有特权操作通过 _sudo_* 包装函数执行：
+    
+    _sudo_tar_czf   → $_SUDO tar -czf     # 备份打包（保留权限）
+    _sudo_tar_xzf   → $_SUDO tar --same-owner -xzf  # 还原解压（恢复所有者）
+    _sudo_tar_tzf   → $_SUDO tar -tzf     # 列出归档内容
+    _sudo_mkdir     → $_SUDO mkdir -p     # 创建锁目录
+    _sudo_rm        → $_SUDO rm -f        # 清理锁文件
+    _sudo_chown     → $_SUDO chown        # 修正归档文件所有者
+```
+
+### 8.3 Web 调用如何提权
+
+Web 后端通过 `child_process.spawn('engine.sh', [...])` 调用引擎，**无需 CLI 层**。
+
+提权方式：确保运行 Web 后端的用户具有 `sudo NOPASSWD` 权限：
+
+```sudoers
+# /etc/sudoers.d/docker-stacks-engine
+<web-user> ALL=(ALL) NOPASSWD: /usr/bin/tar, /usr/bin/mkdir, /usr/bin/rm, /usr/bin/docker, /usr/bin/tee
+```
+
+或者更简单：让 Web 后端以已配置免密的用户身份运行（如 systemd `User=fishme`）：
+
+```ini
+# /etc/systemd/system/ds-web.service
+[Service]
+User=fishme
+ExecStart=/usr/bin/node /srv/docker-stacks/web/server.js
+```
+
+### 8.4 权限级别枚举
+
+`discover` 输出包含 `engine.privilege` 字段：
+
+| privilege | 含义 | _SUDO | 能备份 root 文件 |
+|-----------|------|-------|-----------------|
+| `root` | EUID=0 | `""` | ✓ |
+| `sudo` | 免密 sudo 可用 | `"sudo"` | ✓ |
+| `user` | 普通用户 | `""` | ✗ |
+
+### 8.5 降级行为
+
+当 `_SUDO=""` 且遇到 root 文件时：
+- `_sudo_tar_czf` → 以普通用户身份运行 tar → root 文件 Permission denied → error 事件
+- `_sudo_tar_tzf` → 同样降级
+- `_sudo_tar_xzf` → 先尝试 `tar --same-owner -xzf`，失败则回退 `tar -xzf`（不保留所有者）
+- 锁文件自动从 `/srv/docker-stacks/.cache/` 回退到 `/tmp/`
+
+### 8.6 --no-sudo 标志
+
+即使 sudo 免密可用，也可以通过 `--no-sudo` 强制以降级模式运行：
+
+```bash
+./engine.sh --no-sudo backup openclaw
+```

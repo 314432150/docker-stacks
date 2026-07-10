@@ -2,11 +2,14 @@
 #  engine/backup.sh — 备份指定应用
 # ============================================================
 # 依赖: lib/discover.sh, lib/state.sh, engine/_lib.sh
+#
+# 权限: tar 打包通过 _sudo_tar_czf → 可读取 root 拥有的数据文件
+#       backup 归档本身存于 BACKUP_ROOT（用户可写目录），无需特权
 
 # ── 内部：构建 tar 打包路径列表（纯数据，不 emit） ──
 # 参数: app_name
-# 输出到 stdout: 每行一个路径  {rel_path}|{skip_code}
-#   skip_code: 0=正常,1=目录不存在(跳过)
+# 输出到 stdout: 每行  {rel_path}|{status}
+#   status: "ok"=正常, "skip"=目录不存在
 # 注意: 本函数不调用 _emit，避免 JSON 行混入 tar 路径
 _build_backup_paths() {
     local name="$1"
@@ -22,10 +25,10 @@ _build_backup_paths() {
         else app_rel="stacks/${name}"; fi
 
         local full_path="${ROOT}/${app_rel}/${d}"
-        if [[ ! -d "$full_path" ]]; then
-            echo "${d}|skip"
+        if [[ -n "$_SUDO" ]]; then
+            $_SUDO test -d "$full_path" 2>/dev/null && echo "${app_rel}/${d}|ok" || echo "${d}|skip"
         else
-            echo "${app_rel}/${d}|ok"
+            [[ -d "$full_path" ]] && echo "${app_rel}/${d}|ok" || echo "${d}|skip"
         fi
     done
 }
@@ -83,7 +86,13 @@ cmd_backup() {
     _emit "{\"type\":\"progress\",\"step\":\"打包 ${#paths[@]} 个目录\",\"current\":1,\"total\":1}"
 
     local error_file; error_file="$(mktemp)"
-    if tar -czf "$archive" -C "$ROOT" "${paths[@]}" 2>"$error_file"; then
+    # 使用 _sudo_tar_czf: 保留文件权限 + 可读取 root 拥有的文件
+    if _sudo_tar_czf "$archive" -C "$ROOT" "${paths[@]}" 2>"$error_file"; then
+        # backup 归档属于当前用户（sudo tar 的 -czf 输出目标不改变所有者）
+        # 如果输出文件属于 root，chown 回当前用户
+        if [[ -n "$_SUDO" ]] && [[ "$(stat -c '%U' "$archive" 2>/dev/null)" != "$(whoami)" ]]; then
+            _sudo_chown "$(whoami):$(id -gn)" "$archive"
+        fi
         local size; size="$(du -h "$archive" 2>/dev/null | cut -f1)"
         _emit "{\"type\":\"done\",\"file\":\"${archive_name}\",\"size\":\"${size}\",\"path\":\"${archive}\"}"
         rm -f "$error_file"
