@@ -1,0 +1,49 @@
+# ============================================================
+#  engine/discover.sh — 应用发现（JSON 输出）
+# ============================================================
+# 依赖: lib/discover.sh (discover_apps, get_backup_dirs, get_description)
+
+cmd_discover() {
+    echo -n '{"type":"apps","apps":['
+    local first=true
+
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
+
+        local desc; desc="$(get_description "$name")"
+        # JSON 字符串转义：\ → \\  ;  " → \"
+        desc="${desc//\\/\\\\}"
+        desc="${desc//\"/\\\"}"
+
+        $first || echo -n ','
+        first=false
+
+        echo -n "{\"name\":\"${name}\",\"description\":\"${desc}\",\"dirs\":["
+
+        local dir_first=true
+        while IFS='|' read -r src is_cache; do
+            [[ -n "$src" ]] || continue
+            $dir_first || echo -n ','
+            dir_first=false
+
+            local check_path
+            if [[ "$name" == "dockge" ]]; then
+                check_path="${ROOT}/dockge/${src}"
+            else
+                check_path="${ROOT}/stacks/${name}/${src}"
+            fi
+            local exists=false
+            [[ -d "$check_path" ]] && exists=true
+
+            local recommended
+            if [[ "$is_cache" == "0" ]]; then recommended=true
+            else recommended=false; fi
+
+            echo -n "{\"path\":\"${src}\",\"recommended\":${recommended},\"exists\":${exists}}"
+        done < <(get_backup_dirs "$name")
+
+        echo -n ']}'
+    done < <(discover_apps)
+
+    echo ']}'
+}
