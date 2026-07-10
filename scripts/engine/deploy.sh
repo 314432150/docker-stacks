@@ -2,8 +2,6 @@
 #  engine/deploy.sh — 部署指定应用
 # ============================================================
 # 依赖: lib/discover.sh, engine/_lib.sh
-#
-# 权限: docker compose 操作通过 _SUDO docker 执行
 
 # ── 内部：确保 .env 符号链接 ──
 _ensure_env_link() {
@@ -17,8 +15,7 @@ _ensure_env_link() {
     local env_link="${compose_dir}/.env"
     if [[ ! -L "$env_link" ]] || [[ "$(readlink -f "$env_link" 2>/dev/null)" != "$global_env" ]]; then
         rm -f "$env_link"
-        ln -sf "../../global.env" "$env_link" 2>/dev/null || \
-            $_SUDO ln -sf "../../global.env" "$env_link" 2>/dev/null || true
+        ln -sf "../../global.env" "$env_link" 2>/dev/null || true
         _emit "{\"type\":\"progress\",\"step\":\"${app} .env 已就绪\"}"
     fi
 }
@@ -32,7 +29,7 @@ cmd_deploy() {
         return 1
     fi
 
-    if ! command -v docker &>/dev/null || ! ${_SUDO:-} docker compose version &>/dev/null 2>&1; then
+    if ! command -v docker &>/dev/null || ! docker compose version &>/dev/null 2>&1; then
         _emit '{"type":"error","msg":"docker compose 不可用"}'
         return 3
     fi
@@ -63,16 +60,16 @@ cmd_deploy() {
 
         # 停止已运行的
         local running
-        running=$(cd "$compose_dir" && ${_SUDO:-} docker compose ps --status=running -q 2>/dev/null)
+        running=$(cd "$compose_dir" && docker compose ps --status=running -q 2>/dev/null)
         if [[ -n "$running" ]]; then
             _emit "{\"type\":\"progress\",\"step\":\"停止 ${app}\"}"
-            cd "$compose_dir" && ${_SUDO:-} docker compose down 2>/dev/null || true
+            cd "$compose_dir" && docker compose down 2>/dev/null || true
         fi
 
         # 启动
         _emit "{\"type\":\"progress\",\"step\":\"部署 ${app}\",\"current\":$((success + fail + 1)),\"total\":${#apps[@]}}"
 
-        if (cd "$compose_dir" && ${_SUDO:-} docker compose up -d 2>/dev/null); then
+        if (cd "$compose_dir" && docker compose up -d 2>/dev/null); then
             _emit "{\"type\":\"ok\",\"app\":\"${app}\"}"
             ((success++)) || true
         else

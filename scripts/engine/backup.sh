@@ -3,8 +3,8 @@
 # ============================================================
 # 依赖: lib/discover.sh, lib/state.sh, engine/_lib.sh
 #
-# 权限: tar 打包通过 _sudo_tar_czf → 可读取 root 拥有的数据文件
-#       backup 归档本身存于 BACKUP_ROOT（用户可写目录），无需特权
+# 权限: 以 root 运行时 tar 可读取任何属主的文件，保留原始权限
+#       以普通用户运行时，root 属主文件将 Permission denied
 
 # ── 内部：构建 tar 打包路径列表（纯数据，不 emit） ──
 # 参数: app_name
@@ -25,11 +25,7 @@ _build_backup_paths() {
         else app_rel="stacks/${name}"; fi
 
         local full_path="${ROOT}/${app_rel}/${d}"
-        if [[ -n "$_SUDO" ]]; then
-            $_SUDO test -d "$full_path" 2>/dev/null && echo "${app_rel}/${d}|ok" || echo "${d}|skip"
-        else
-            [[ -d "$full_path" ]] && echo "${app_rel}/${d}|ok" || echo "${d}|skip"
-        fi
+        [[ -d "$full_path" ]] && echo "${app_rel}/${d}|ok" || echo "${d}|skip"
     done
 }
 
@@ -86,13 +82,7 @@ cmd_backup() {
     _emit "{\"type\":\"progress\",\"step\":\"打包 ${#paths[@]} 个目录\",\"current\":1,\"total\":1}"
 
     local error_file; error_file="$(mktemp)"
-    # 使用 _sudo_tar_czf: 保留文件权限 + 可读取 root 拥有的文件
-    if _sudo_tar_czf "$archive" -C "$ROOT" "${paths[@]}" 2>"$error_file"; then
-        # backup 归档属于当前用户（sudo tar 的 -czf 输出目标不改变所有者）
-        # 如果输出文件属于 root，chown 回当前用户
-        if [[ -n "$_SUDO" ]] && [[ "$(stat -c '%U' "$archive" 2>/dev/null)" != "$(whoami)" ]]; then
-            _sudo_chown "$(whoami):$(id -gn)" "$archive"
-        fi
+    if tar -czf "$archive" -C "$ROOT" "${paths[@]}" 2>"$error_file"; then
         local size; size="$(du -h "$archive" 2>/dev/null | cut -f1)"
         _emit "{\"type\":\"done\",\"file\":\"${archive_name}\",\"size\":\"${size}\",\"path\":\"${archive}\"}"
         rm -f "$error_file"

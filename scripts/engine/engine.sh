@@ -52,13 +52,10 @@ source "$ENGINE_DIR/deploy.sh"
 
 # ── 路由 + 主入口 ──
 _main() {
-    # 预解析 --no-sudo 和 --help
-    local cmd="" args=()
+    local cmd=""
+    local args=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --no-sudo)
-                _SUDO=""
-                shift ;;
             -h|--help)
                 cmd="--help"
                 break ;;
@@ -83,10 +80,7 @@ _main() {
             _emit '{"type":"error","msg":"未指定子命令，用法: engine.sh {discover|backup|restore|deploy} [...]"}'
             return 1 ;;
         --help)
-            echo "用法: engine.sh [--no-sudo] {discover|backup|restore|deploy} [参数...]"
-            echo ""
-            echo "选项:"
-            echo "  --no-sudo       禁用 sudo 提权（即使免密可用）"
+            echo "用法: engine.sh {discover|backup|restore|deploy} [参数...]"
             echo ""
             echo "子命令:"
             echo "  discover              扫描所有应用，输出 JSON 列表（含权限级别）"

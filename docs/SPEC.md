@@ -2,13 +2,12 @@
 
 ## 1. 通用约定
 
-- **入口**：`scripts/engine/engine.sh [--no-sudo] <subcommand> [args...]`
-- **选项**：`--no-sudo` 强制禁用 sudo 提权（即使免密可用），须在最前面
+- **入口**：`scripts/engine/engine.sh <subcommand> [args...]`
 - **输出**：stdout = JSONL（每行合法 JSON），stderr = 日志/警告（含启动时权限级别报告）
 - **退出码**：0=成功, 1=参数错误, 2=锁冲突, 3=前置条件不满足
 - **任务锁**：写入操作（backup/restore/deploy）受 lock 保护，优先 `$ROOT/.cache/engine.lock`，不可写时回退 `/tmp/docker-stacks-engine/engine.lock`
 - **ROOT**：engine.sh 向上两级目录（`scripts/engine/../..`）
-- **权限提升**：引擎自检测 `sudo -n` 可用性，设 `_SUDO="sudo"`。文件操作（tar/mkdir/rm）通过 `_sudo_*` 包装函数使用 sudo
+- **权限**：无 sudo 依赖，完全由调用方 EUID 决定。以 root 启动 → 完整权限；以普通用户启动 → 仅操作用户可读写文件
 
 ---
 
@@ -27,8 +26,7 @@
 {
   "type": "apps",
   "engine": {
-    "privilege": "user",
-    "sudo": false
+    "privilege": "user"
   },
   "apps": [
     {
@@ -45,10 +43,7 @@
 
 `engine.privilege` 枚举：
 - `"root"` — 以 root 身份运行（EUID=0）
-- `"sudo"` — 普通用户但 sudo 免密可用
-- `"user"` — 普通用户，无特权
-
-`engine.sudo`：`true`/`false`，sudo 免密是否可用。
+- `"user"` — 普通用户
 
 ### 退出码
 - `0`：成功
@@ -254,11 +249,4 @@ timestamp = date +%Y%m%d-%H%M%S
 ```
 输出: usage 文本到 stdout
 退出码: 0
-```
-
-### --no-sudo
-强制禁用 sudo，即使 `sudo -n true` 成功。
-必须在子命令之前：
-```bash
-./engine.sh --no-sudo backup openclaw
 ```

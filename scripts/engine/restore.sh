@@ -3,13 +3,13 @@
 # ============================================================
 # 依赖: lib/discover.sh, engine/_lib.sh
 #
-# 权限: tar 解压通过 _sudo_tar_xzf --same-owner → 恢复原始文件所有者
-#       tar 安全备份通过 _sudo_tar_czf → 可读取 root 拥有的现有文件
+# 权限: 以 root 运行时 tar --same-owner 可恢复原始文件所有者
+#       以普通用户运行时，tar --same-owner 对 chown 操作静默忽略
 
 # ── 内部：列出备份中的应用名 ──
 _list_apps_in_backup() {
     local archive="$1"
-    _sudo_tar_tzf "$archive" 2>/dev/null | \
+    tar -tzf "$archive" 2>/dev/null | \
         grep -oP '(?:stacks|dockge)/[^/]+' | \
         sed 's|^stacks/||' | sort -u || true
 }
@@ -20,7 +20,7 @@ _app_archive_paths() {
     local prefix="stacks/${app}/"
     [[ "$app" == "dockge" ]] && prefix="dockge/"
 
-    _sudo_tar_tzf "$archive" 2>/dev/null | \
+    tar -tzf "$archive" 2>/dev/null | \
         grep "^${prefix}" | \
         grep -o "${prefix}[^/]\+" | sort -u || true
 }
@@ -33,15 +33,8 @@ _pre_restore_backup() {
     [[ "$app" == "dockge" ]] && app_path="dockge"
 
     local target="${ROOT}/${app_path}"
-    if [[ -n "$_SUDO" ]]; then
-        if ! $_SUDO test -d "$target" 2>/dev/null || \
-           [[ -z "$($_SUDO ls -A "$target" 2>/dev/null)" ]]; then
-            return 0  # 无内容，不需备份
-        fi
-    else
-        if [[ ! -d "$target" ]] || [[ -z "$(ls -A "$target" 2>/dev/null)" ]]; then
-            return 0
-        fi
+    if [[ ! -d "$target" ]] || [[ -z "$(ls -A "$target" 2>/dev/null)" ]]; then
+        return 0  # 无内容，不需备份
     fi
 
     local pre_dir="${BACKUP_ROOT}/pre_restore_$(date +%Y%m%d-%H%M%S)"
@@ -53,16 +46,9 @@ _pre_restore_backup() {
         local pre_archive="${pre_dir}/${safe_fn}.tar.gz"
 
         local check_path="${ROOT}/${dir_path}"
-        local exists=false
-        if [[ -n "$_SUDO" ]]; then
-            $_SUDO test -d "$check_path" 2>/dev/null && exists=true
-        else
-            [[ -d "$check_path" ]] && exists=true
-        fi
-
-        if $exists; then
+        if [[ -d "$check_path" ]]; then
             _emit "{\"type\":\"progress\",\"step\":\"安全备份 ${dir_path}\"}"
-            if _sudo_tar_czf "$pre_archive" -C "$ROOT" "${dir_path}" 2>/dev/null; then
+            if tar -czf "$pre_archive" -C "$ROOT" "${dir_path}" 2>/dev/null; then
                 _emit "{\"type\":\"progress\",\"step\":\"安全备份完成: ${pre_archive##*${BACKUP_ROOT}/}\"}"
             fi
         fi
@@ -81,20 +67,11 @@ _docker_stop() {
     fi
 
     local running
-    if [[ -n "$_SUDO" ]]; then
-        running=$(cd "$compose_dir" && $_SUDO docker compose ps --status=running -q 2>/dev/null)
-    else
-        running=$(cd "$compose_dir" && docker compose ps --status=running -q 2>/dev/null)
-    fi
+    running=$(cd "$compose_dir" && docker compose ps --status=running -q 2>/dev/null)
 
     if [[ -n "$running" ]]; then
-        if [[ -n "$_SUDO" ]]; then
-            (cd "$compose_dir" && $_SUDO docker compose down 2>/dev/null) && \
-                _emit "{\"type\":\"progress\",\"step\":\"停止 ${app}\"}"
-        else
-            (cd "$compose_dir" && docker compose down 2>/dev/null) && \
-                _emit "{\"type\":\"progress\",\"step\":\"停止 ${app}\"}"
-        fi
+        (cd "$compose_dir" && docker compose down 2>/dev/null) && \
+            _emit "{\"type\":\"progress\",\"step\":\"停止 ${app}\"}"
     fi
 }
 
@@ -108,18 +85,10 @@ _docker_start() {
         return 0
     fi
 
-    if [[ -n "$_SUDO" ]]; then
-        if timeout 60 $_SUDO docker compose -f "${compose_dir}/compose.yml" up -d 2>/dev/null; then
-            _emit "{\"type\":\"progress\",\"step\":\"启动 ${app}\"}"
-        else
-            _emit "{\"type\":\"error\",\"app\":\"${app}\",\"msg\":\"容器启动失败\"}"
-        fi
+    if timeout 60 docker compose -f "${compose_dir}/compose.yml" up -d 2>/dev/null; then
+        _emit "{\"type\":\"progress\",\"step\":\"启动 ${app}\"}"
     else
-        if timeout 60 docker compose -f "${compose_dir}/compose.yml" up -d 2>/dev/null; then
-            _emit "{\"type\":\"progress\",\"step\":\"启动 ${app}\"}"
-        else
-            _emit "{\"type\":\"error\",\"app\":\"${app}\",\"msg\":\"容器启动失败\"}"
-        fi
+        _emit "{\"type\":\"error\",\"app\":\"${app}\",\"msg\":\"容器启动失败\"}"
     fi
 }
 
@@ -159,13 +128,13 @@ cmd_restore() {
         # 2. 安全备份（快照现有数据）
         _pre_restore_backup "$archive" "$app"
 
-        # 3. 解压（--same-owner 恢复文件所有者，需 sudo/root）
+        # 3. 解压（--same-owner 需要 root 才能恢复文件所有者）
         local app_path="stacks/${app}"
         [[ "$app" == "dockge" ]] && app_path="dockge"
 
         _emit "{\"type\":\"progress\",\"step\":\"解压 ${app}\",\"current\":$((success + fail + 1)),\"total\":${#apps[@]}}"
 
-        if _sudo_tar_xzf "$archive" -C "$ROOT" "$app_path" 2>/dev/null; then
+        if tar --same-owner -xzf "$archive" -C "$ROOT" "$app_path" 2>/dev/null; then
             _emit "{\"type\":\"ok\",\"app\":\"${app}\"}"
             ((success++)) || true
         else

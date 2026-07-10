@@ -114,7 +114,6 @@ _cleanup
 _assert_exit "无参数返回 1" 1 "$ENGINE"
 _assert_exit "未知子命令返回 1" 1 "$ENGINE" "unknown_cmd"
 _assert_exit "--help 返回 0" 0 "$ENGINE" "--help"
-_assert_exit "--no-sudo backup 无参数返回 1" 1 "$ENGINE" "--no-sudo" "backup"
 echo
 
 # ════════════════════════════════════════════════════════════
@@ -136,7 +135,6 @@ d = json.loads(sys.stdin.read())
 assert d['type'] == 'apps'
 assert 'engine' in d, 'missing engine block'
 assert 'privilege' in d['engine'], 'missing privilege'
-assert 'sudo' in d['engine'], 'missing sudo flag'
 assert isinstance(d['apps'], list)
 for app in d['apps']:
     assert 'name' in app
@@ -155,9 +153,9 @@ _assert_eq "discover 数据结构完整" "$apps_check" "OK"
 app_count=$(echo "$out" | python3 -c "import sys,json; print(len(json.loads(sys.stdin.read())['apps']))" 2>/dev/null || echo 0)
 _assert_eq "discover 发现至少 1 个应用" "$([[ $app_count -ge 1 ]] && echo ok || echo fail)" "ok"
 
-# 权限级别在 {root,sudo,user} 中
+# 权限级别在 {root,user} 中
 priv=$(echo "$out" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['engine']['privilege'])" 2>/dev/null)
-_assert_eq "discover privilege 在合法集合" "$([[ $priv =~ ^(root|sudo|user)$ ]] && echo ok || echo fail)" "ok"
+_assert_eq "discover privilege 在合法集合" "$([[ $priv =~ ^(root|user)$ ]] && echo ok || echo fail)" "ok"
 echo
 
 # ════════════════════════════════════════════════════════════
@@ -263,7 +261,7 @@ _cleanup
 _assert_exit "deploy 无参数返回 1" 1 "$ENGINE" "deploy"
 
 # 7b: docker compose 不可用时返回 3
-if command -v docker &>/dev/null && ${_SUDO:-} docker compose version &>/dev/null 2>&1; then
+if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; then
     echo "  - docker compose 可用，跳过不可用测试"
 else
     _assert_exit "deploy docker 不可用时返回 3" 3 "$ENGINE" deploy "${_test_app:-openclaw}"
@@ -329,8 +327,7 @@ for fn in discover_apps get_backup_dirs get_description parse_volumes \
           init_state select_all_recommended get_selected_dirs has_any_selected \
           toggle_app is_selected toggle_dir \
           webdav_configured webdav_connection_test webdav_upload \
-          webdav_list webdav_download webdav_file_size \
-          _sudo_tar_czf _sudo_tar_xzf _sudo_tar_tzf _sudo_mkdir _sudo_rm _sudo_chown; do
+          webdav_list webdav_download webdav_file_size; do
     # 搜索 engine/ 和 lib/ 中的定义
     found=0
     for f in "$LIB"/*.sh "${ROOT}/scripts/engine"/*.sh; do
