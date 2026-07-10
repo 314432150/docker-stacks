@@ -26,7 +26,7 @@ _assert_eq() {
 
 _assert_json_has() {
     local desc="$1" json="$2" key="$3"
-    if echo "$json" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); _=d['$key']" 2>/dev/null; then
+    if echo "$json" | grep -q "\"${key}\":"; then
         echo "  ✓ $desc"
         PASS=$((PASS + 1))
     else

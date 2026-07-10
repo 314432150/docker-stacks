@@ -28,7 +28,7 @@ if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; the
     deploy_out=""
     set +e; deploy_out=$("$ENGINE" deploy "$_test_app" 2>/dev/null); set -e
     deploy_events=$(echo "$deploy_out" | while read -r line; do
-        echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['type'])" 2>/dev/null || true
+        echo "$line" | sed -n 's/.*"type":"\([^"]*\)".*/\1/p'
     done)
     _assert_contains "deploy 含 start 事件" "$deploy_events" "start"
     _assert_contains "deploy 含 done 事件" "$deploy_events" "done"

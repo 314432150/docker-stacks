@@ -27,7 +27,7 @@ if [[ -n "$_test_app" ]]; then
         set +e; restore_out=$("$ENGINE" restore "$test_archive" "$_test_app" 2>/dev/null || true); set -e
 
         events=$(echo "$restore_out" | while read -r line; do
-            echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['type'])" 2>/dev/null || true
+            echo "$line" | sed -n 's/.*"type":"\([^"]*\)".*/\1/p'
         done)
         _assert_contains "restore 含 start 事件" "$events" "start"
         _assert_contains "restore 含 done 事件" "$events" "done"

@@ -13,12 +13,7 @@ _assert_exit "backup 无参数返回 1" 1 "$ENGINE" "backup"
 
 # 6b: 正常备份
 BACKUP_TEST_APP="openclaw"
-if "$ENGINE" discover 2>/dev/null | python3 -c "
-import sys, json
-apps = json.loads(sys.stdin.read())['apps']
-names = [a['name'] for a in apps]
-assert '$BACKUP_TEST_APP' in names
-" 2>/dev/null; then
+if "$ENGINE" discover 2>/dev/null | grep -q "\"name\":\"$BACKUP_TEST_APP\""; then
     backup_out=""
     backup_exit=0
     set +e; backup_out=$("$ENGINE" backup "$BACKUP_TEST_APP" 2>/dev/null); backup_exit=$?; set -e
@@ -26,14 +21,14 @@ assert '$BACKUP_TEST_APP' in names
 
     # 验证 JSONL 事件类型
     events=$(echo "$backup_out" | while read -r line; do
-        echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['type'])" 2>/dev/null
+        echo "$line" | sed -n 's/.*"type":"\([^"]*\)".*/\1/p'
     done)
     _assert_contains "backup 含 start 事件" "$events" "start"
     _assert_contains "backup 含 done 事件" "$events" "done"
 
     # 验证备份文件已创建
     done_line=$(echo "$backup_out" | grep '"type":"done"' | head -1 || true)
-    backup_path=$(echo "$done_line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('path',''))" 2>/dev/null || true)
+    backup_path=$(echo "$done_line" | sed -n 's/.*"path":"\([^"]*\)".*/\1/p')
     if [[ -f "$backup_path" ]]; then
         echo "  ✓ backup 文件已创建: $(basename "$backup_path")"
         PASS=$((PASS + 1))

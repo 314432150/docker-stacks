@@ -9,12 +9,7 @@ echo "[9] 任务锁互斥"
 _cleanup
 
 _lock_test_app="${BACKUP_TEST_APP:-openclaw}"
-if "$ENGINE" discover 2>/dev/null | python3 -c "
-import sys, json
-apps = json.loads(sys.stdin.read())['apps']
-names = [a['name'] for a in apps]
-assert '$_lock_test_app' in names
-" 2>/dev/null; then
+if "$ENGINE" discover 2>/dev/null | grep -q "\"name\":\"$_lock_test_app\""; then
     # 使用与 engine 相同的锁路径
     lock_file="${ROOT}/.cache/engine.lock"
     if [[ ! -w "${ROOT}/.cache" ]]; then
