@@ -57,8 +57,8 @@ cp instance/global.env.example instance/global.env
 vim instance/global.env
 
 # 3. 配置 Web 管理面板（可选）
-#    认证：编辑 service/docker/compose.yml 中的 WEB_USER / WEB_PASS
-#    WebDAV：启动后通过 Web UI → 设置 → WebDAV 配置
+#    认证：首次访问 Web UI 时通过初始化流程创建管理员账户
+#    WebDAV：登录后通过 Web UI → 设置 → WebDAV 配置
 
 # 4. 部署所有应用
 sudo bash service/engine/cmd/entry.sh deploy homeassistant jellyfin lucky metacubex metatube mosquitto openclaw vaultwarden xunlei

@@ -34,8 +34,6 @@ services:
       PORT: "3001"
       HOST: "0.0.0.0"
       HOME: "/root"
-      # WEB_USER:
-      # WEB_PASS:
 
     logging:
       driver: "json-file"
