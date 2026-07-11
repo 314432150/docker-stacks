@@ -25,11 +25,11 @@ test.describe('概览页 (Dashboard)', () => {
     await expect(page.getByRole('menuitem', { name: '设置' })).toBeVisible()
   })
 
-  test('显示权限标签', async ({ page }) => {
+  test('Dashboard 不再显示权限标签（已删除，移到未来系统信息卡片）', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('h2')
-    const tag = page.locator('text=/管理员权限|普通用户/')
-    await expect(tag).toBeVisible({ timeout: 5000 })
+    // 标签已删除：页面不应包含"管理员权限"或"普通用户"
+    await expect(page.locator('text=/管理员权限|普通用户/')).toHaveCount(0)
   })
 
   test('显示刷新按钮', async ({ page }) => {

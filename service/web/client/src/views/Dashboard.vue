@@ -63,9 +63,6 @@ function goDeploy(app) {
     <n-space align="center" justify="space-between" style="margin-bottom: 20px">
       <n-text tag="h2" style="margin: 0">应用概览</n-text>
       <n-space>
-        <n-tag :type="privilege === 'root' ? 'success' : 'warning'">
-          {{ privilege === 'root' ? '管理员权限' : '普通用户' }}
-        </n-tag>
         <n-button size="small" @click="load(true)">刷新</n-button>
       </n-space>
     </n-space>

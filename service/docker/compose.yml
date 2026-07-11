@@ -30,9 +30,6 @@ services:
       # 容器内 node_modules 独立存储（使用镜像构建产物，不污染宿主机）
       - ds-web-node-modules:/srv/docker-stacks/service/web/server/node_modules
 
-    # 环境变量：web 服务自身的配置
-    #   - 认证凭据（WEB_USER/WEB_PASS）：填值启用 HTTP Basic Auth，留空不启用
-    #   - WebDAV 配置不再通过 env_file 注入，改由 settings.json 管理
     environment:
       PORT: "3001"
       HOST: "0.0.0.0"
