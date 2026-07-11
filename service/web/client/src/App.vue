@@ -85,9 +85,16 @@ onUnmounted(() => {
   }
 })
 
-// ── 同步 document 根元素 class，控制 body 层级背景色 ──
+// ── 同步 document 根元素状态，让 Dark Reader 等扩展识别当前实际主题 ──
+// 1. class="dark"：控制 body 背景色（已有 CSS 规则）
+// 2. color-scheme 属性：告诉浏览器/扩展当前是 dark/light，影响原生 UI 渲染
+//    这是 Dark Reader 识别"网站当前主题"的关键信号
 watchEffect(() => {
-  document.documentElement.classList.toggle('dark', isDark.value)
+  const html = document.documentElement
+  html.classList.toggle('dark', isDark.value)
+  // 动态 color-scheme：dark 时声明 dark，否则声明 light
+  // 配合 meta color-scheme="light dark"（声明能力），告诉扩展"我支持但当前是这个"
+  html.style.colorScheme = isDark.value ? 'dark' : 'light'
 })
 
 /** 菜单点击处理：编程式导航，避免 RouterLink + NMenu 的重复导航问题 */
