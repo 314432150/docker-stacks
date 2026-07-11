@@ -224,7 +224,7 @@ onMounted(load)
             <n-input
               v-model:value="url"
               placeholder="https://dav.jianguoyun.com/dav/docker-stacks"
-              :input-props="{ name: 'webdav-url', autocomplete: 'off' }"
+              :input-props="{ name: 'webdav-url', autocomplete: 'chrome-off' }"
             />
           </n-space>
 
@@ -233,7 +233,7 @@ onMounted(load)
             <n-input
               v-model:value="user"
               placeholder="WebDAV 账号"
-              :input-props="{ name: 'webdav-user', autocomplete: 'off' }"
+              :input-props="{ name: 'webdav-user', autocomplete: 'chrome-off' }"
             />
           </n-space>
 
