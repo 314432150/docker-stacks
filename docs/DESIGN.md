@@ -7,10 +7,10 @@
 │  Web Backend (Node.js)     │  ← 消费 JSONL 事件流
 │  child_process.spawn(...)  │
 └──────────┬─────────────────┘
-           │ call: engine.sh <subcommand> --json [...args]
+           │ call: entry.sh <subcommand> --json [...args]
            ▼
 ┌────────────────────┐  ┌─────────────────────┐
-│ engine/engine.sh   │  │ engine/*.sh          │  ← 核心操作层（事实来源）
+│ cmd/entry.sh       │  │ cmd/*.sh              │  ← 核心操作层（事实来源）
 │ （入口 + 路由）     │  │ discover/backup/     │     JSONL stdout
 └────────┬───────────┘  │ restore/deploy/      │     stderr 日志
          │              │ _lib.sh              │
@@ -27,44 +27,44 @@
 
 **原则**：
 - `lib/` = 纯函数库，无任何终端交互（无 `read`/`clear`/`printf '\033...'`）
-- `engine/` = 核心业务逻辑，接收参数 → 输出 JSONL 事件流
+- `cmd/` = 核心业务逻辑，接收参数 → 输出 JSONL 事件流
 - 引擎只有一个调用方（Web 后端），不提供人机交互
 - 所有函数输出到 stdout 的必须是合法 JSON 行，日志/调试走 stderr
 
 ## 2. 目录结构
 
 ```
-scripts/
-├── engine/                    # 引擎层（可执行 + 可被 source）
-│   ├── engine.sh              # 入口：路径解析 → source lib → 路由
-│   ├── _lib.sh                # 引擎共享：_emit, _acquire_lock, _release_lock
-│   ├── discover.sh            # cmd_discover
-│   ├── backup.sh              # cmd_backup
-│   ├── restore.sh             # cmd_restore
-│   └── deploy.sh              # cmd_deploy
-├── lib/                       # 纯库（引擎引用）
-│   ├── common.sh              # 颜色 + 工具
-│   ├── discover.sh            # 应用扫描 + 卷解析
-│   ├── state.sh               # 备份选中状态文件管理
-│   └── webdav.sh              # WebDAV 纯函数（上传/下载/列表/连接测试）
+service/engine/
+├── cmd/                        # 命令实现层（可执行 + 可被 source）
+│   ├── entry.sh                 # 入口：路径解析 → source lib → 路由
+│   ├── _lib.sh                  # 引擎共享：_emit, _acquire_lock, _release_lock
+│   ├── discover.sh              # cmd_discover
+│   ├── backup.sh                # cmd_backup
+│   ├── restore.sh               # cmd_restore
+│   └── deploy.sh                # cmd_deploy
+├── lib/                         # 纯库（引擎引用）
+│   ├── common.sh                # 颜色 + 工具
+│   ├── discover.sh              # 应用扫描 + 卷解析
+│   ├── state.sh                 # 备份选中状态文件管理
+│   └── webdav.sh                # WebDAV 纯函数（上传/下载/列表/连接测试）
 ```
 
 ## 3. 模块职责
 
-### 3.1 `engine/engine.sh` — 入口
+### 3.1 `cmd/entry.sh` — 入口
 
 ```
 职责：
   - 解析自身路径 → ROOT / LIB_DIR / BACKUP_ROOT
-  - 加载 global.env
-  - 按依赖顺序 source lib/ → engine/_lib.sh → engine/discover → engine/backup → engine/restore → engine/deploy
+  - 加载 global.env 和 service/web.env
+  - 按依赖顺序 source lib/ → cmd/_lib.sh → cmd/discover → cmd/backup → cmd/restore → cmd/deploy
   - 解析 $1 子命令，路由到对应 cmd_* 函数
 
 子命令：
-  engine.sh discover
-  engine.sh backup <app1> [app2 ...]
-  engine.sh restore <archive_path> <app1> [app2 ...]
-  engine.sh deploy <app1> [app2 ...]
+  entry.sh discover
+  entry.sh backup <app1> [app2 ...]
+  entry.sh restore <archive_path> <app1> [app2 ...]
+  entry.sh deploy <app1> [app2 ...]
 
 退出码：
   0 = 成功
@@ -73,7 +73,7 @@ scripts/
   3 = 前置条件不满足（docker 不可用、目录不存在等）
 ```
 
-### 3.2 `engine/_lib.sh` — 引擎共享基础设施
+### 3.2 `cmd/_lib.sh` — 引擎共享基础设施
 
 ```
 函数：
@@ -95,7 +95,7 @@ JSON 事件类型规范：
   {"type":"done","success":N,"fail":N,[file:,size:,path:]}
 ```
 
-### 3.3 `engine/discover.sh` — 应用发现
+### 3.3 `cmd/discover.sh` — 应用发现
 
 ```
 函数：
@@ -106,7 +106,7 @@ JSON 事件类型规范：
   lib/discover.sh: discover_apps, get_backup_dirs, get_description
 ```
 
-### 3.4 `engine/backup.sh` — 备份
+### 3.4 `cmd/backup.sh` — 备份
 
 ```
 函数：
@@ -135,7 +135,7 @@ JSON 事件类型规范：
   - WebDAV 上传失败 → error 事件，不阻断 done 输出
 ```
 
-### 3.5 `engine/restore.sh` — 还原
+### 3.5 `cmd/restore.sh` — 还原
 
 ```
 函数：
@@ -161,7 +161,7 @@ JSON 事件类型规范：
   - compose up 超时 → error，continue
 ```
 
-### 3.6 `engine/deploy.sh` — 部署
+### 3.6 `cmd/deploy.sh` — 部署
 
 ```
 函数：
@@ -183,16 +183,16 @@ JSON 事件类型规范：
 ## 4. 依赖关系图
 
 ```
-engine/engine.sh
+cmd/entry.sh
   ├── lib/common.sh          (颜色 + 工具)
   ├── lib/discover.sh        (discover_apps, get_backup_dirs, parse_volumes, get_description)
   ├── lib/state.sh           (状态文件管理 — 供 backup 阶段使用)
   ├── lib/webdav.sh          (WebDAV 纯函数)
-  ├── engine/_lib.sh         (_emit, _acquire_lock, _release_lock)
-  ├── engine/discover.sh
-  ├── engine/backup.sh       → lib/discover, lib/state
-  ├── engine/restore.sh      → lib/discover, lib/webdav(可选)
-  └── engine/deploy.sh       → lib/discover
+  ├── cmd/_lib.sh            (_emit, _acquire_lock, _release_lock)
+  ├── cmd/discover.sh
+  ├── cmd/backup.sh          → lib/discover, lib/state
+  ├── cmd/restore.sh         → lib/discover, lib/webdav(可选)
+  └── cmd/deploy.sh          → lib/discover
 ```
 
 ## 5. JSON 事件流契约
@@ -230,13 +230,13 @@ engine/engine.sh
 备份后可通过 `--upload` 标志自动上传到 WebDAV：
 
 ```bash
-sudo engine.sh backup --upload homeassistant
+sudo service/engine/cmd/entry.sh backup --upload homeassistant
 ```
 
 也可独立调用 lib/webdav.sh 函数：
 
 ```bash
-source scripts/lib/webdav.sh
+source service/engine/lib/webdav.sh
 webdav_upload backups/file.tar.gz file.tar.gz
 webdav_list
 webdav_download file.tar.gz backups/file.tar.gz
@@ -277,7 +277,7 @@ sudo node server.js
 # /etc/systemd/system/ds-web.service
 [Service]
 User=root
-ExecStart=/usr/bin/node /srv/docker-stacks/web/server.js
+ExecStart=/usr/bin/node /srv/docker-stacks/service/web/server/src/app.js
 ```
 
 ### 8.3 权限级别枚举

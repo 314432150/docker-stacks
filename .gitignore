@@ -27,9 +27,12 @@ stacks/openclaw/data/config/workspace/
 
 # 运行时缓存
 .cache/
+node_modules/
+.vite/
 
-# 真实全局配置（含敏感凭据，禁止入库；请用 global.env.example 复制后填写）
+# 真实配置（含敏感凭据，禁止入库；请用 *.example 复制后填写）
 global.env
+service/web.env
 
 # 系统与编辑器
 .DS_Store

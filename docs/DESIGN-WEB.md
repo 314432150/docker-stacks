@@ -17,7 +17,7 @@ Browser                         Server
 └─────────────────┘             │              │               │
                                 │              ▼               │
                                 │  ┌──────────────────────┐    │
-                                │  │ scripts/engine/*.sh  │    │
+                                │  │ service/engine/cmd/*  │    │
                                 │  └──────────────────────┘    │
                                 └──────────────────────────────┘
 ```
@@ -31,7 +31,7 @@ Browser                         Server
 ## 2. 目录结构
 
 ```
-web/
+service/web/
 ├── server/                      # 后端 (Node.js + Fastify)
 │   ├── package.json
 │   ├── src/
@@ -46,9 +46,11 @@ web/
 │   │   └── config.js            # ROOT/BACKUP_ROOT/ENGINE 路径解析
 │   └── tests/
 │       ├── engine.test.js        # 引擎桥接层测试
-│       ├── routes.test.js        # API 路由测试
+│       ├── routes.test.js        #  API 路由测试
 │       └── fixtures/
 │           └── mock-engine.sh    # 模拟引擎输出
+│
+├── client/                       # 前端 (Vue 3 + Vite + Naive UI)
 │
 ├── client/                       # 前端 (Vue 3 + Vite + Naive UI)
 │   ├── package.json
@@ -77,11 +79,11 @@ web/
 
 ## 3. 模块职责
 
-### 3.1 引擎桥接层 `web/server/src/engine.js`
+### 3.1 引擎桥接层 `service/web/server/src/engine.js`
 
 ```
 职责：
-  - 封装 spawn(engine.sh, [...args])
+  - 封装 spawn(entry.sh, [...args])
   - 逐行读取 stdout → JSON.parse → 对每行触发回调 (事件驱动)
   - stderr 合并输出到服务器日志
   - 进程退出时 resolve/reject Promise
@@ -196,7 +198,7 @@ App.vue
 ```
 前端 Dashboard mount → GET /api/apps
   → server: executeEngine("discover", [], callback)
-    → spawn engine.sh discover
+    → spawn entry.sh discover
     → 单行 JSON parse → resolve
   → 返回 { apps, engine } JSON
   → 前端渲染 AppCard 列表
@@ -283,10 +285,10 @@ dev:
 
 ```bash
 # 终端 1: 启动后端（端口 3001）
-cd web/server && npm run dev
+cd service/web/server && npm run dev
 
 # 终端 2: 启动前端（端口 5173, 代理 API 到 3001）
-cd web/client && npm run dev
+cd service/web/client && npm run dev
 ```
 
 前端 Vite 配置代理：
@@ -305,17 +307,17 @@ export default defineConfig({
 
 ```bash
 # 构建前端
-cd web/client && npm run build   # 输出 → web/server/static/
+cd service/web/client && npm run build   # 输出 → service/web/server/static/
 
 # 启动后端（Fastify 托管前端静态文件 + API）
-cd web/server && node src/app.js
+cd service/web/server && node src/app.js
 ```
 
 访问 `http://localhost:3001` → 完整 Web 应用。
 
 ### Docker 部署（后续阶段）
 
-`stacks/ds-web/compose.yml`，将 web/ 挂载到容器，后端以 root 运行（spawn engine.sh 需要 root 权限操作容器数据文件）。
+`service/compose.yml`，将 service/web/ 挂载到容器，后端以 root 运行（spawn entry.sh 需要 root 权限操作容器数据文件）。
 
 ## 9. 安全考虑
 

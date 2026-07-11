@@ -1,7 +1,7 @@
 # ============================================================
-#  engine/backup.sh — 备份指定应用
+#  cmd/backup.sh — 备份指定应用
 # ============================================================
-# 依赖: lib/discover.sh, engine/_lib.sh
+# 依赖: lib/discover.sh, cmd/_lib.sh
 #
 # 权限: 以 root 运行时 tar 可读取任何属主的文件，保留原始权限
 #       以普通用户运行时，root 属主文件将 Permission denied

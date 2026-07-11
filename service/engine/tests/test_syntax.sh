@@ -7,11 +7,11 @@ source "${SCRIPT_DIR}/_helpers.sh"
 
 echo "[1] 脚本语法检查"
 for f in "${ENGINE}" \
-         "${ROOT}/scripts/engine/_lib.sh" \
-         "${ROOT}/scripts/engine/discover.sh" \
-         "${ROOT}/scripts/engine/backup.sh" \
-         "${ROOT}/scripts/engine/restore.sh" \
-         "${ROOT}/scripts/engine/deploy.sh"; do
+         "${ROOT}/service/engine/cmd/_lib.sh" \
+         "${ROOT}/service/engine/cmd/discover.sh" \
+         "${ROOT}/service/engine/cmd/backup.sh" \
+         "${ROOT}/service/engine/cmd/restore.sh" \
+         "${ROOT}/service/engine/cmd/deploy.sh"; do
     if [[ -f "$f" ]]; then
         if bash -n "$f" 2>/dev/null; then
             echo "  ✓ $(basename "$f")"
@@ -26,12 +26,12 @@ for f in "${ENGINE}" \
 done
 echo
 
-echo "[2] engine.sh 可执行"
+echo "[2] entry.sh 可执行"
 if [[ -x "$ENGINE" ]]; then
-    echo "  ✓ engine.sh is executable"
+    echo "  ✓ entry.sh is executable"
     PASS=$((PASS + 1))
 else
-    echo "  ✗ engine.sh is NOT executable"
+    echo "  ✗ entry.sh is NOT executable"
     FAIL=$((FAIL + 1))
 fi
 echo

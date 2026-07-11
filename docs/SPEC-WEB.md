@@ -56,7 +56,7 @@
 {"error": true, "code": "ENGINE_ERROR", "message": "引擎 discover 执行失败"}
 ```
 
-**行为**：直接透传 `engine.sh discover` 的 stdout JSON。
+**行为**：直接透传 `entry.sh discover` 的 stdout JSON。
 
 ---
 
@@ -97,7 +97,7 @@
 **行为**：
 1. 生成 taskId
 2. 注册 task 到内存状态
-3. 异步启动 `engine.sh backup`（可选 `--upload`, `--keep N`）
+3. 异步启动 `entry.sh backup`（可选 `--upload`, `--keep N`）
 4. 每个 JSONL 事件 → 存入 task.history + emit 到该 task 的 EventEmitter
 5. 引擎退出 → 设置 task.status，启动 5 分钟清理定时器
 
@@ -212,8 +212,8 @@ onEvent:    (event: EngineEvent) => void — 可选，按行回调
 
 **路径解析**：
 ```
-ROOT         = path.resolve(scriptDir, "../../..")  // web/server/src → ROOT
-ENGINE       = path.join(ROOT, "scripts/engine/engine.sh")
+ROOT         = path.resolve(scriptDir, "../../../..")  // web/server/src → ROOT
+ENGINE       = path.join(ROOT, "service/engine/cmd/entry.sh")
 BACKUP_ROOT  = path.join(ROOT, "backups")
 ```
 

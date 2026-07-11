@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================
-#  engine/engine.sh — 核心引擎入口
+#  cmd/entry.sh — 引擎入口
 # ============================================================
 # 职责: 路径解析 → 加载配置/lib → 路由分发 → 调用 cmd_*
 # 输出: 子命令 stdout 输出 JSONL 事件流，日志走 stderr
-# 用法: ./engine.sh {discover|backup|restore|deploy} [...]
+# 用法: ./entry.sh {discover|backup|restore|deploy} [...]
 # ============================================================
 set -euo pipefail
 
@@ -27,14 +27,17 @@ _resolve_self() {
 }
 
 SELF="$(_resolve_self)"
-ROOT="$(cd "$(dirname "$SELF")/../.." && pwd)"       # /srv/docker-stacks
-ENGINE_DIR="$(dirname "$SELF")"                       # .../scripts/engine
-LIB_DIR="${ROOT}/scripts/lib"
+ROOT="$(cd "$(dirname "$SELF")/../../.." && pwd)"    # /srv/docker-stacks
+ENGINE_DIR="$(dirname "$SELF")"                       # .../service/engine/cmd
+LIB_DIR="$(cd "$(dirname "$SELF")/../lib" && pwd)"    # .../service/engine/lib
 BACKUP_ROOT="${BACKUP_ROOT:-${ROOT}/backups}"
 
 # ── 加载全局配置 ──
 if [[ -f "${ROOT}/global.env" ]]; then
     set -a; source "${ROOT}/global.env"; set +a
+fi
+if [[ -f "${ROOT}/service/web.env" ]]; then
+    set -a; source "${ROOT}/service/web.env"; set +a
 fi
 
 # ── 加载 lib 纯工具库 ──
@@ -42,7 +45,7 @@ source "$LIB_DIR/common.sh"
 source "$LIB_DIR/discover.sh"
 source "$LIB_DIR/webdav.sh"
 
-# ── 加载 engine 模块（按依赖顺序） ──
+# ── 加载 cmd 模块（按依赖顺序） ──
 source "$ENGINE_DIR/_lib.sh"
 source "$ENGINE_DIR/discover.sh"
 source "$ENGINE_DIR/backup.sh"
@@ -76,10 +79,10 @@ _main() {
         restore)   cmd_restore "${args[@]}" ;;
         deploy)    cmd_deploy "${args[@]}" ;;
         "")
-            _emit '{"type":"error","msg":"未指定子命令，用法: engine.sh {discover|backup|restore|deploy} [...]"}'
+            _emit '{"type":"error","msg":"未指定子命令，用法: entry.sh {discover|backup|restore|deploy} [...]"}'
             return 1 ;;
         --help)
-            echo "用法: engine.sh {discover|backup|restore|deploy} [参数...]" >&2
+            echo "用法: entry.sh {discover|backup|restore|deploy} [参数...]" >&2
             echo "" >&2
             echo "子命令:" >&2
             echo "  discover              扫描所有应用，输出 JSON 列表（含权限级别）" >&2

@@ -33,7 +33,7 @@ process.env.DS_TEST_MODE = '1'
 describe('引擎桥接层 (engine.js)', () => {
   // 使用 mock-engine.sh 测试引擎桥接
   // 注意：当前 engine.js 仍指向真实 ENGINE，这里测试桥接层逻辑
-  // 真实集成测试在运行时有 engine.sh 时执行
+  // 真实集成测试在运行时有 entry.sh 时执行
 
   it('spawn 正常进程并逐行解析 JSONL', async () => {
     const { spawn } = await import('node:child_process')
@@ -156,7 +156,7 @@ describe('REST API 路由', () => {
   // ── GET /api/apps ──
   it('GET /api/apps 返回 200 配合法结构 (真实引擎)', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/apps' })
-    // 在 CI 环境可能无 engine.sh，允许 500
+    // 在 CI 环境可能无 entry.sh，允许 500
     if (res.statusCode === 500) {
       assert.ok(res.json().error)
       return

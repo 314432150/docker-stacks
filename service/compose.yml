@@ -6,7 +6,7 @@ services:
     container_name: ds-web
     restart: unless-stopped
 
-    # 以 root 运行：engine.sh 需要 root 权限操作容器数据文件（chmod/chown 等）
+    # 以 root 运行：entry.sh 需要 root 权限操作容器数据文件（chmod/chown 等）
     user: "0:0"
 
     # 端口映射：宿主机 3001 → 容器 3001
@@ -14,7 +14,7 @@ services:
       - "3001:3001"
 
     # 工作目录：后端入口所在目录
-    working_dir: /srv/docker-stacks/web/server
+    working_dir: /srv/docker-stacks/service/web/server
 
     volumes:
       # 挂载整个 docker-stacks 仓库（引擎脚本、应用栈、备份目录）
@@ -24,11 +24,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
       # 容器内 node_modules 独立存储（不污染宿主机，避免平台差异）
-      - ds-web-node-modules:/srv/docker-stacks/web/server/node_modules
+      - ds-web-node-modules:/srv/docker-stacks/service/web/server/node_modules
 
-    # 环境变量：从项目根目录 global.env 加载（相对路径：../../ = /srv/docker-stacks）
+    # 环境变量：系统配置（web.env）和基础配置（global.env）
     env_file:
-      - ../../global.env
+      - ../global.env
+      - ./web.env
 
     # 额外覆盖：确保端口配置正确
     environment:

@@ -1,5 +1,5 @@
 // ── GET /api/apps ──
-// 调用 engine.sh discover，透传结果
+// 调用 entry.sh discover，透传结果
 
 import { executeEngine } from '../engine.js'
 

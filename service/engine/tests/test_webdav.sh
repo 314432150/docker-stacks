@@ -9,12 +9,12 @@ echo "[11] WebDAV 集成测试"
 _cleanup
 
 # 加载 WebDAV 配置
-if [[ -f "${ROOT}/global.env" ]]; then
-    set -a; source "${ROOT}/global.env"; set +a
+if [[ -f "${ROOT}/service/web.env" ]]; then
+    set -a; source "${ROOT}/service/web.env"; set +a
 fi
 
 # 加载 webdav 模块
-source "${ROOT}/scripts/lib/webdav.sh"
+source "${ROOT}/service/engine/lib/webdav.sh"
 
 # 11a: webdav_configured
 _assert_eq "webdav_configured 检测" \

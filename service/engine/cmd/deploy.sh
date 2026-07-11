@@ -1,7 +1,7 @@
 # ============================================================
-#  engine/deploy.sh — 部署指定应用
+#  cmd/deploy.sh — 部署指定应用
 # ============================================================
-# 依赖: lib/discover.sh, engine/_lib.sh
+# 依赖: lib/discover.sh, cmd/_lib.sh
 
 # ── 内部：确保 .env 符号链接 ──
 _ensure_env_link() {

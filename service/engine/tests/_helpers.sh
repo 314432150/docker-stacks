@@ -6,8 +6,8 @@
 # ============================================================
 
 # ── 路径解析 ──
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENGINE="${ROOT}/scripts/engine/engine.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+ENGINE="${ROOT}/service/engine/cmd/entry.sh"
 
 # ── 断言函数 ──
 

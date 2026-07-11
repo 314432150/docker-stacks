@@ -1,12 +1,12 @@
 // ── GET/PUT /api/settings/webdav ──
-// 读取/写入 global.env 中的 WEBDAV_* 配置
+// 读取/写入 service/web.env 中的 WEBDAV_* 配置
 
 import { readFile, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { ROOT } from '../config.js'
 import { join } from 'node:path'
 
-const ENV_FILE = join(ROOT, 'global.env')
+const ENV_FILE = join(ROOT, 'service/web.env')
 
 async function parseWebdavSettings() {
   const content = await readFile(ENV_FILE, 'utf-8')

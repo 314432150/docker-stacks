@@ -2,11 +2,11 @@
 
 ## 1. 通用约定
 
-- **入口**：`scripts/engine/engine.sh <subcommand> [args...]`
+- **入口**：`service/engine/cmd/entry.sh <subcommand> [args...]`
 - **输出**：stdout = JSONL（每行合法 JSON），stderr = 日志/警告（含启动时权限级别报告）
 - **退出码**：0=成功, 1=参数错误, 2=锁冲突, 3=前置条件不满足
 - **任务锁**：写入操作（backup/restore/deploy）受 lock 保护，优先 `$ROOT/.cache/engine.lock`，不可写时回退 `/tmp/docker-stacks-engine/engine.lock`
-- **ROOT**：engine.sh 向上两级目录（`scripts/engine/../..`）
+- **ROOT**：entry.sh 向上三级目录（`service/engine/cmd/../../..`）
 - **权限**：无 sudo 依赖，完全由调用方 EUID 决定。以 root 启动 → 完整权限；以普通用户启动 → 仅操作用户可读写文件
 
 ---
@@ -15,7 +15,7 @@
 
 ### 调用
 ```bash
-./engine.sh discover
+./entry.sh discover
 ```
 
 ### 输入
@@ -59,7 +59,7 @@
 
 ### 调用
 ```bash
-./engine.sh backup [--upload] [--keep N] <app1> [app2 app3 ...]
+./entry.sh backup [--upload] [--keep N] <app1> [app2 app3 ...]
 ```
 
 ### 输入
@@ -147,7 +147,7 @@ WebDAV 上传失败时：
 
 ### 调用
 ```bash
-./engine.sh restore <archive_path> <app1> [app2 ...]
+./entry.sh restore <archive_path> <app1> [app2 ...]
 ```
 
 ### 输入
@@ -209,7 +209,7 @@ WebDAV 上传失败时：
 
 ### 调用
 ```bash
-./engine.sh deploy <app1> [app2 ...]
+./entry.sh deploy <app1> [app2 ...]
 ```
 
 ### 输入
@@ -243,6 +243,7 @@ WebDAV 上传失败时：
 ### .env 符号链接
 - global.env 存在 → 自动为每个 app 创建 `stacks/<app>/.env → ../../global.env`
 - global.env 不存在 → 跳过，emit progress
+- web.env 仅由 ds-web 和引擎消费（Web 界面认证 + 远程 WebDAV），不暴露给各 stack
 
 ### 容器生命周期
 - 部署前先 `docker compose down`（如果有运行中的）
@@ -255,11 +256,11 @@ WebDAV 上传失败时：
 
 ---
 
-## 6. engine.sh 入口行为
+## 6. entry.sh 入口行为
 
 ### 无参数
 ```jsonl
-{"type":"error","msg":"未指定子命令，用法: engine.sh {discover|backup|restore|deploy} [...]"}
+{"type":"error","msg":"未指定子命令，用法: entry.sh {discover|backup|restore|deploy} [...]"}
 ```
 → 退出码 1
 

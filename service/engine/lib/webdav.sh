@@ -3,7 +3,7 @@
 # ============================================================
 #
 # 依赖: curl, python3（列表解析）；curl 上传/下载无需 python
-# 配置: 在 global.env 中设置 WEBDAV_URL / WEBDAV_USER / WEBDAV_PASS
+# 配置: 在 web.env 中设置 WEBDAV_URL / WEBDAV_USER / WEBDAV_PASS
 #
 
 # ── 检查 WebDAV 是否已配置 ──
@@ -172,7 +172,7 @@ webdav_setup_wizard() {
         new_pass="$WEBDAV_PASS"
     fi
 
-    local env_file="${ROOT}/global.env"
+    local env_file="${ROOT}/service/web.env"
     if grep -q "^WEBDAV_URL=" "$env_file" 2>/dev/null; then
         sed -i "s|^WEBDAV_URL=.*|WEBDAV_URL=${new_url}|" "$env_file"
     else

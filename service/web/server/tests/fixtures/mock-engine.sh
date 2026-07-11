@@ -1,7 +1,7 @@
 #!/bin/sh
 # ── 模拟引擎 ──
 # 用法: mock-engine.sh <subcommand> [args...]
-# 模拟 engine.sh 的 JSONL 输出，不操作真实文件系统
+# 模拟 entry.sh 的 JSONL 输出，不操作真实文件系统
 case "$1" in
   discover)
     echo '{"type":"apps","engine":{"privilege":"root"},"apps":[{"name":"test-app","description":"Test application","dirs":[{"path":"data/config","recommended":true,"exists":true},{"path":"data/downloads","recommended":false,"exists":false}]}]}'

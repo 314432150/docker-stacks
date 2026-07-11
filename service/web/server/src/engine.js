@@ -1,5 +1,5 @@
 // ── 引擎桥接层 ──
-// 封装 spawn engine.sh，逐行解析 JSONL 事件流
+// 封装 spawn entry.sh，逐行解析 JSONL 事件流
 
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'

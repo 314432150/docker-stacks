@@ -1,5 +1,5 @@
 # ============================================================
-#  engine/discover.sh — 应用发现（JSON 输出）
+#  cmd/discover.sh — 应用发现（JSON 输出）
 # ============================================================
 # 依赖: lib/discover.sh (discover_apps, get_backup_dirs, get_description)
 # 输出包含权限级别信息（engine.privilege: root|user）

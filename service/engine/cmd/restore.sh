@@ -1,7 +1,7 @@
 # ============================================================
-#  engine/restore.sh — 从备份还原指定应用
+#  cmd/restore.sh — 从备份还原指定应用
 # ============================================================
-# 依赖: lib/discover.sh, engine/_lib.sh
+# 依赖: lib/discover.sh, cmd/_lib.sh
 #
 # 权限: 以 root 运行时 tar --same-owner 可恢复原始文件所有者
 #       以普通用户运行时，tar --same-owner 对 chown 操作静默忽略
@@ -100,7 +100,7 @@ cmd_restore() {
     local apps=("$@")
 
     if [[ -z "$archive" ]] || [[ ${#apps[@]} -eq 0 ]]; then
-        _emit '{"type":"error","msg":"用法: engine.sh restore <archive> <app...>"}'
+        _emit '{"type":"error","msg":"用法: entry.sh restore <archive> <app...>"}'
         return 1
     fi
 
