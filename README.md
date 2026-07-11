@@ -8,7 +8,9 @@ NAS 上运行的 Docker Compose 服务编排仓库，部署在 `/srv/docker-stac
 docker-stacks/
 ├── global.env               # 全局基础环境变量（NAS_IP、PUID/PGID、存储路径、代理），所有 stack 共享
 ├── service/                  # 基础服务层
-│   ├── compose.yml           #   ds-web 编排
+│   ├── docker/               #   容器编排（Dockerfile + compose.yml）
+│   │   ├── Dockerfile
+│   │   └── compose.yml       #     ds-web 服务定义
 │   ├── web.env               #   Web 系统配置（认证 + WebDAV 备份），不进 Git
 │   ├── web.env.example
 │   ├── engine/               #   引擎脚本集

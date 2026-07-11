@@ -2,7 +2,10 @@
 # 提供 Web 管理面板，支持通过浏览器备份/还原/部署 docker-stacks 应用
 services:
   ds-web:
-    image: node:22
+    build:
+      context: ../..              # /srv/docker-stacks（项目根目录）
+      dockerfile: service/docker/Dockerfile
+    image: ds-web:latest
     container_name: ds-web
     restart: unless-stopped
 
@@ -23,30 +26,19 @@ services:
       # Docker socket：deploy 命令需要执行 docker compose
       - /var/run/docker.sock:/var/run/docker.sock
 
-      # 容器内 node_modules 独立存储（不污染宿主机，避免平台差异）
+      # 容器内 node_modules 独立存储（使用镜像构建产物，不污染宿主机）
       - ds-web-node-modules:/srv/docker-stacks/service/web/server/node_modules
 
     # 环境变量：系统配置（web.env）和基础配置（global.env）
     env_file:
-      - ../global.env
-      - ./web.env
+      - ../../global.env
+      - ../web.env
 
     # 额外覆盖：确保端口配置正确
     environment:
       PORT: "3001"
       HOST: "0.0.0.0"
       HOME: "/root"
-
-    # 启动命令：首次运行安装依赖，之后直接启动
-    command: >
-      sh -c '
-        if [ ! -d node_modules/fastify ]; then
-          echo "[ds-web] 首次启动，安装依赖..."
-          npm install --omit=dev
-        fi
-        echo "[ds-web] 启动 Fastify 服务端..."
-        exec node src/app.js
-      '
 
     logging:
       driver: "json-file"
@@ -62,5 +54,5 @@ services:
       retries: 3
 
 volumes:
-  # 命名卷：跨重启持久化 node_modules
+  # 命名卷：持久化 node_modules（首次从镜像复制，之后复用）
   ds-web-node-modules:

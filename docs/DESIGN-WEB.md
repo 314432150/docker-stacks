@@ -317,7 +317,7 @@ cd service/web/server && node src/app.js
 
 ### Docker 部署（后续阶段）
 
-`service/compose.yml`，将 service/web/ 挂载到容器，后端以 root 运行（spawn entry.sh 需要 root 权限操作容器数据文件）。
+`service/docker/compose.yml` + `Dockerfile`，将 service/web/ 挂载到容器，后端以 root 运行（spawn entry.sh 需要 root 权限操作容器数据文件）。
 
 ## 9. 安全考虑
 
