@@ -886,3 +886,184 @@ describe('参数校验函数 (validate.js)', () => {
     assert.ok(validate.validateDirs({ 'test-app': ['../etc'] }) !== null)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// WebDAV 连接测试（POST /api/settings/webdav/test）
+//
+// 用 node:http 起 mock WebDAV server，验证 4 个关键场景：
+// 207 Multi-Status + XML 响应体 → 成功
+// 401 → 认证失败
+// 200 + HTML → 非 WebDAV（虽然 HTTP 通但协议不对）
+// 405 → 服务拒绝 PROPFIND
+// ═══════════════════════════════════════════════════════════════
+import { createServer } from 'node:http'
+import { setWebdavSettings, getWebdavSettings } from '../src/db/settings.js'
+
+describe('WebDAV 连接测试 (POST /api/settings/webdav/test)', () => {
+  let mockServer
+  let mockPort
+  let app
+  let sessionCookie
+
+  before(async () => {
+    // 启动 mock WebDAV server，支持 4 种行为切换
+    // mode 用 URL path 区分（不用 query param，因为后端会去掉末尾 / 破坏查询参数）
+    mockServer = createServer((req, res) => {
+      const url = new URL(req.url, `http://localhost`)
+      // path 形如 /webdav-success/, /auth-fail/, /html-200/, /method-not-allowed/
+      const mode = url.pathname.replace(/^\//, '').replace(/\/$/, '')
+
+      if (mode === 'webdav-success') {
+        // 真实 WebDAV 服务：207 Multi-Status + XML
+        res.writeHead(207, { 'Content-Type': 'application/xml; charset=utf-8' })
+        res.end('<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus xmlns:D="DAV:"><D:response><D:href>/dav/</D:href></D:response></D:multistatus>')
+        return
+      }
+      if (mode === 'auth-fail') {
+        res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="webdav"' })
+        res.end('Unauthorized')
+        return
+      }
+      if (mode === 'html-200') {
+        // 普通 HTTP 服务（模拟 baidu）：200 + HTML
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+        res.end('<!DOCTYPE html><html><body>not webdav</body></html>')
+        return
+      }
+      if (mode === 'method-not-allowed') {
+        res.writeHead(405, { 'Allow': 'GET, POST' })
+        res.end('Method Not Allowed')
+        return
+      }
+      res.writeHead(404)
+      res.end()
+    })
+
+    await new Promise((resolve) => mockServer.listen(0, '127.0.0.1', resolve))
+    mockPort = mockServer.address().port
+
+    // 构建 app（需登录态，因为 webdav test 端点需认证）
+    delete process.env.WEB_USER
+    delete process.env.WEB_PASS
+    const authMod = await import('../src/db/settings.js')
+    await authMod.setAuthCredentials('admin', 'test123')
+    app = await buildApp({ logger: false })
+    await app.ready()
+
+    // 登录拿 session cookie
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'admin', pass: 'test123' },
+    })
+    const cookie = loginRes.cookies?.find(c => c.name === 'ds-sid')
+    if (!cookie) throw new Error(`登录失败: status=${loginRes.statusCode}, body=${loginRes.body}`)
+    sessionCookie = cookie.value
+  })
+
+  after(async () => {
+    await new Promise((resolve) => mockServer.close(resolve))
+    await app?.close()
+  })
+
+  it('真实 WebDAV: 207 Multi-Status + XML 响应体 → success', async () => {
+    // 配置 WebDAV 指向 mock
+    setWebdavSettings({
+      url: `http://127.0.0.1:${mockPort}/webdav-success/`,
+      user: 'testuser',
+      pass: 'testpass',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/settings/webdav/test',
+      cookies: { 'ds-sid': sessionCookie },
+    })
+
+    assert.strictEqual(res.statusCode, 200)
+    const body = res.json()
+    assert.strictEqual(body.success, true, `期望 success=true，实际: ${JSON.stringify(body)}`)
+    assert.strictEqual(body.httpCode, 207)
+    assert.ok(body.message.includes('207'), `期望消息含 207: ${body.message}`)
+  })
+
+  it('密码错误: 服务返回 401 → success=false', async () => {
+    setWebdavSettings({
+      url: `http://127.0.0.1:${mockPort}/auth-fail/`,
+      user: 'testuser',
+      pass: 'wrongpass',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/settings/webdav/test',
+      cookies: { 'ds-sid': sessionCookie },
+    })
+
+    assert.strictEqual(res.statusCode, 200)
+    const body = res.json()
+    assert.strictEqual(body.success, false, `期望 success=false: ${JSON.stringify(body)}`)
+    assert.strictEqual(body.httpCode, 401)
+  })
+
+  it('非 WebDAV 服务: 200 + HTML 响应体 → success=false（不能误判为成功）', async () => {
+    setWebdavSettings({
+      url: `http://127.0.0.1:${mockPort}/html-200/`,
+      user: 'testuser',
+      pass: 'testpass',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/settings/webdav/test',
+      cookies: { 'ds-sid': sessionCookie },
+    })
+
+    assert.strictEqual(res.statusCode, 200)
+    const body = res.json()
+    assert.strictEqual(body.success, false, `期望 success=false（200 但 HTML 不是 WebDAV）: ${JSON.stringify(body)}`)
+    assert.strictEqual(body.httpCode, 200)
+  })
+
+  it('拒绝 PROPFIND: 405 Method Not Allowed → success=false', async () => {
+    setWebdavSettings({
+      url: `http://127.0.0.1:${mockPort}/method-not-allowed/`,
+      user: 'testuser',
+      pass: 'testpass',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/settings/webdav/test',
+      cookies: { 'ds-sid': sessionCookie },
+    })
+
+    assert.strictEqual(res.statusCode, 200)
+    const body = res.json()
+    assert.strictEqual(body.success, false, `期望 success=false（405）: ${JSON.stringify(body)}`)
+    assert.strictEqual(body.httpCode, 405)
+  })
+
+  it('请求体参数优先级高于已存储配置（未保存前测试）', async () => {
+    setWebdavSettings({
+      url: `http://127.0.0.1:${mockPort}/old/`,
+      user: 'olduser',
+      pass: 'oldpass',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/settings/webdav/test',
+      cookies: { 'ds-sid': sessionCookie },
+      payload: {
+        url: `http://127.0.0.1:${mockPort}/webdav-success/`,
+        user: 'newuser',
+        pass: 'newpass',
+      },
+    })
+
+    const body = res.json()
+    assert.strictEqual(body.success, true, `期望请求体覆盖已存储配置: ${JSON.stringify(body)}`)
+    assert.strictEqual(body.httpCode, 207)
+  })
+})

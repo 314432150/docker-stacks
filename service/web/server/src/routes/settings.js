@@ -82,12 +82,14 @@ export default async function settingsRoutes(fastify) {
       })
     }
 
-    // 使用 curl PROPFIND 测试连接（与 webdav_connection_test 逻辑一致）
+    // 使用 curl PROPFIND 测试连接
+    // 必须捕获响应体，不能仅看状态码——百度等普通 HTTP 服务返回 200 但不是 WebDAV
     const testUrl = url.replace(/\/$/, '')
     try {
       const result = await new Promise((resolve, reject) => {
         const child = spawn('curl', [
-          '-s', '-o', '/dev/null', '-w', '%{http_code}',
+          '-s',
+          '-w', '\n%{http_code}',  // 末尾追加状态码，与响应体用换行分隔
           '--max-time', '10',
           '-u', `${user}:${pass}`,
           '-X', 'PROPFIND',
@@ -100,17 +102,45 @@ export default async function settingsRoutes(fastify) {
         child.stdout.on('data', d => { stdout += d })
         child.stderr.on('data', d => { stderr += d })
         child.on('error', reject)
-        child.on('close', code => resolve({ code, stdout: stdout.trim(), stderr }))
+        child.on('close', code => resolve({ code, stdout, stderr }))
       })
 
-      const httpCode = parseInt(result.stdout, 10)
-      const success = httpCode >= 200 && httpCode < 400
+      // 解析响应体和状态码
+      // curl 输出: "<body>\n<http_code>"
+      const lastNewline = result.stdout.lastIndexOf('\n')
+      const body = result.stdout.substring(0, lastNewline).trim()
+      const httpCode = parseInt(result.stdout.substring(lastNewline + 1).trim(), 10)
 
-      if (success) {
-        return { success: true, message: `连接成功（HTTP ${httpCode}）`, httpCode }
-      } else {
-        return { success: false, message: `连接失败（HTTP ${httpCode}）`, httpCode }
+      // 1. 认证失败 → 401/403（最常见错误）
+      if (httpCode === 401 || httpCode === 403) {
+        return { success: false, message: `认证失败（HTTP ${httpCode}）：用户名或密码错误`, httpCode }
       }
+      // 2. 路径不存在或方法不允许
+      if (httpCode === 404) {
+        return { success: false, message: '路径不存在（HTTP 404），请检查 WebDAV 地址', httpCode }
+      }
+      if (httpCode === 405) {
+        return { success: false, message: '服务器拒绝 PROPFIND 方法，该 URL 不是 WebDAV 服务', httpCode }
+      }
+      // 3. 服务器错误
+      if (httpCode >= 500) {
+        return { success: false, message: `WebDAV 服务器错误（HTTP ${httpCode}）`, httpCode }
+      }
+      // 4. 成功判定：必须 207 + 含 multistatus XML（PROPFIND 标准响应）
+      //    或 200 + XML 响应（部分服务实现宽松）
+      const isXmlResponse = body.startsWith('<?xml') || body.includes('<multistatus')
+      if (httpCode === 207 && isXmlResponse) {
+        return { success: true, message: 'WebDAV 连接成功（207 Multi-Status）', httpCode }
+      }
+      if (httpCode === 200 && isXmlResponse) {
+        return { success: true, message: 'WebDAV 连接成功（200 + XML）', httpCode }
+      }
+      // 5. 200/3xx 但不是 XML → 可能是普通 HTTP 服务（如 baidu）
+      if (httpCode >= 200 && httpCode < 400) {
+        return { success: false, message: `返回 HTTP ${httpCode} 但响应非 XML，该 URL 不是 WebDAV 服务`, httpCode }
+      }
+      // 6. 其他（如 1xx, 4xx 不在上面列表）
+      return { success: false, message: `连接失败（HTTP ${httpCode}）`, httpCode }
     } catch (err) {
       fastify.log.error({ err }, 'WebDAV 连接测试执行失败')
       return { success: false, message: `连接测试失败: ${err.message}` }

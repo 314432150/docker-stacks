@@ -230,4 +230,61 @@ test.describe('设置页 (Settings)', () => {
     const errorCount = await errorAlert.count()
     expect(errorCount).toBe(0)
   })
+
+  test('WebDAV 测试连接返回非 WebDAV（200 + HTML）时显示错误信息', async ({ page }) => {
+    // mock 后端返回 200 但 success=false（模拟百度等普通 HTTP 服务）
+    await page.route('**/api/settings/webdav/test', async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          success: false,
+          message: '返回 HTTP 200 但响应非 XML，该 URL 不是 WebDAV 服务',
+          httpCode: 200,
+        }),
+      })
+    })
+
+    await page.goto('/#/settings')
+    await page.waitForSelector('text=WebDAV 远程备份', { timeout: 5000 })
+
+    const passInput = page.locator('.n-card').first().locator('input[type="password"]')
+    if (await passInput.isVisible()) {
+      await passInput.fill('test-password')
+    }
+
+    // 点保存触发测试连接
+    const saveBtn = page.locator('button:has-text("保存")')
+    await saveBtn.click()
+
+    // 等待弹窗（Naive UI n-dialog）
+    await expect(page.locator('.n-dialog')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.n-dialog')).toContainText('不是 WebDAV')
+  })
+
+  test('WebDAV 测试连接返回 401 认证失败时显示错误信息', async ({ page }) => {
+    await page.route('**/api/settings/webdav/test', async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          success: false,
+          message: '认证失败（HTTP 401）：用户名或密码错误',
+          httpCode: 401,
+        }),
+      })
+    })
+
+    await page.goto('/#/settings')
+    await page.waitForSelector('text=WebDAV 远程备份', { timeout: 5000 })
+
+    const passInput = page.locator('.n-card').first().locator('input[type="password"]')
+    if (await passInput.isVisible()) {
+      await passInput.fill('wrongpass')
+    }
+
+    const saveBtn = page.locator('button:has-text("保存")')
+    await saveBtn.click()
+
+    await expect(page.locator('.n-dialog')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.n-dialog')).toContainText('认证失败')
+  })
 })
