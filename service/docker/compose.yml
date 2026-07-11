@@ -30,9 +30,8 @@ services:
       # 容器内 node_modules 独立存储（使用镜像构建产物，不污染宿主机）
       - ds-web-node-modules:/srv/docker-stacks/service/web/server/node_modules
 
-    # 环境变量：系统配置（web.env）和基础配置（global.env）
+    # 环境变量：仅 web 服务配置（global.env 是 app 运行数据，不需要引入）
     env_file:
-      - ../../global.env
       - ../web.env
 
     # 额外覆盖：确保端口配置正确
