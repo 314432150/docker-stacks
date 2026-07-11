@@ -1,12 +1,15 @@
 // ── GET /api/backups ──
 // 返回 backups/ 下所有 *.tar.gz 文件列表
 // 优先读取同名的 .json 索引文件（备份时自动生成），无索引时回退到 tar -tzf
+// ── DELETE /api/backups/:name ──
+// 删除指定备份文件及其索引文件
 
 import { resolve } from 'node:path'
-import { readdir, stat, readFile } from 'node:fs/promises'
+import { readdir, stat, readFile, unlink } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { BACKUP_ROOT } from '../config.js'
+import { validateArchive } from '../validate.js'
 
 const execFileP = promisify(execFile)
 
@@ -91,5 +94,51 @@ export default async function backupsRoutes(fastify) {
         message: `无法列出备份文件: ${err.message}`,
       })
     }
+  })
+
+  // ── DELETE /api/backups/:name ──
+  fastify.delete('/api/backups/:name', async (request, reply) => {
+    const { name } = request.params
+
+    // 安全校验：防路径遍历
+    const err = validateArchive(name)
+    if (err) {
+      return reply.code(400).send({ error: true, code: 'BAD_REQUEST', message: err })
+    }
+
+    // 仅允许删除 .tar.gz 备份文件
+    if (!name.endsWith('.tar.gz')) {
+      return reply.code(400).send({
+        error: true,
+        code: 'BAD_REQUEST',
+        message: '仅允许删除 .tar.gz 备份文件',
+      })
+    }
+
+    const filePath = resolve(BACKUP_ROOT, name)
+    const indexPath = filePath + '.json'
+
+    try {
+      await unlink(filePath)
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        return reply.code(404).send({
+          error: true,
+          code: 'NOT_FOUND',
+          message: `备份文件不存在: ${name}`,
+        })
+      }
+      fastify.log.error({ err: e }, 'failed to delete backup')
+      return reply.code(500).send({
+        error: true,
+        code: 'INTERNAL_ERROR',
+        message: `删除备份失败: ${e.message}`,
+      })
+    }
+
+    // 同时删除索引文件（忽略错误）
+    try { await unlink(indexPath) } catch { /* skip */ }
+
+    return { ok: true, deleted: name }
   })
 }

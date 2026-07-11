@@ -2,10 +2,10 @@
 import { ref, computed, watch, onMounted, onActivated } from 'vue'
 import {
   NText, NCheckbox, NButton, NSpace, NAlert, NDivider,
-  NCard, NGrid, NGi, NIcon, NEmpty,
+  NCard, NGrid, NGi, NIcon, NEmpty, NPopconfirm,
 } from 'naive-ui'
-import { CheckmarkCircle } from '@vicons/ionicons5'
-import { fetchApps, fetchBackups, runRestore } from '../composables/useApi.js'
+import { CheckmarkCircle, TrashOutline } from '@vicons/ionicons5'
+import { fetchApps, fetchBackups, deleteBackup, runRestore } from '../composables/useApi.js'
 import { getSSEUrl } from '../composables/useSSE.js'
 import AppCardGrid from '../components/AppCardGrid.vue'
 import SkeletonCards from '../components/SkeletonCards.vue'
@@ -15,6 +15,7 @@ const apps = ref([])
 const backups = ref([])
 const pageLoading = ref(true)
 const loading = ref(false)
+const deleting = ref('')
 const archive = ref('')
 const selectedApps = ref([])
 const error = ref('')
@@ -119,6 +120,23 @@ async function doRestore() {
 function onDone() {
   loading.value = false
 }
+
+// ── 删除备份 ──
+async function doDelete(name) {
+  deleting.value = name
+  error.value = ''
+  try {
+    await deleteBackup(name)
+    if (archive.value === name) {
+      archive.value = ''
+    }
+    await loadData()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    deleting.value = ''
+  }
+}
 </script>
 
 <template>
@@ -165,7 +183,29 @@ function onDone() {
             </n-text>
 
             <template #footer>
-              <n-text depth="3" style="font-size: 12px">{{ fmtSize(b.size) }}</n-text>
+              <n-space justify="space-between" align="center">
+                <n-text depth="3" style="font-size: 12px">{{ fmtSize(b.size) }}</n-text>
+                <n-popconfirm
+                  positive-text="删除"
+                  negative-text="取消"
+                  @positive-click="doDelete(b.name)"
+                >
+                  <template #trigger>
+                    <n-button
+                      text
+                      size="small"
+                      type="error"
+                      :loading="deleting === b.name"
+                      @click.stop
+                    >
+                      <template #icon>
+                        <n-icon size="18" :component="TrashOutline" />
+                      </template>
+                    </n-button>
+                  </template>
+                  确认删除此备份文件？
+                </n-popconfirm>
+              </n-space>
             </template>
           </n-card>
         </n-gi>

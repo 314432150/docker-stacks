@@ -1,11 +1,9 @@
 export async function fetchWithError(url, options = {}) {
   const { body, ...rest } = options
-  const fetchOptions = {
-    ...rest,
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-  }
+  const fetchOptions = { ...rest, headers: { ...options.headers } }
   if (body) {
     fetchOptions.body = JSON.stringify(body)
+    fetchOptions.headers['Content-Type'] = 'application/json'
   }
   const res = await fetch(url, fetchOptions)
 

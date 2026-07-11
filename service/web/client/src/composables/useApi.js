@@ -103,6 +103,17 @@ export async function fetchBackups() {
   return await res.json()
 }
 
+export async function deleteBackup(name) {
+  const res = await fetchWithError(`/api/backups/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.message || `删除备份失败 (${res.status})`)
+  }
+  return await res.json()
+}
+
 export async function fetchWebdavSettings() {
   const res = await fetchWithError('/api/settings/webdav')
   if (!res.ok) {
