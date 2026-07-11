@@ -224,7 +224,13 @@ onMounted(load)
             <n-input
               v-model:value="url"
               placeholder="https://dav.jianguoyun.com/dav/docker-stacks"
-              :input-props="{ name: 'webdav-url', autocomplete: 'chrome-off' }"
+              :input-props="{
+                name: 'webdav-url',
+                autocomplete: 'chrome-off',
+                'data-bwignore': 'true',
+                'data-1p-ignore': true,
+                'data-lpignore': 'true',
+              }"
             />
           </n-space>
 
@@ -233,7 +239,13 @@ onMounted(load)
             <n-input
               v-model:value="user"
               placeholder="WebDAV 账号"
-              :input-props="{ name: 'webdav-user', autocomplete: 'chrome-off' }"
+              :input-props="{
+                name: 'webdav-user',
+                autocomplete: 'chrome-off',
+                'data-bwignore': 'true',
+                'data-1p-ignore': true,
+                'data-lpignore': 'true',
+              }"
             />
           </n-space>
 
@@ -244,7 +256,13 @@ onMounted(load)
               type="password"
               :placeholder="configured ? '留空则不修改密码' : 'WebDAV 密码'"
               show-password-on="click"
-              :input-props="{ name: 'webdav-pass', autocomplete: 'new-password' }"
+              :input-props="{
+                name: 'webdav-pass',
+                autocomplete: 'new-password',
+                'data-bwignore': 'true',
+                'data-1p-ignore': true,
+                'data-lpignore': 'true',
+              }"
             />
           </n-space>
 
