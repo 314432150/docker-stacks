@@ -1,9 +1,12 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { NText, NCheckboxGroup, NCheckbox, NButton, NSpace, NAlert, NDivider } from 'naive-ui'
+import {
+  NText, NCheckbox, NButton, NSpace, NAlert, NDivider,
+} from 'naive-ui'
 import { fetchApps, runDeploy } from '../composables/useApi.js'
 import { getSSEUrl } from '../composables/useSSE.js'
+import AppCardGrid from '../components/AppCardGrid.vue'
 import EventLog from '../components/EventLog.vue'
 
 const route = useRoute()
@@ -73,7 +76,8 @@ function onDone() {
     <n-text tag="h2" style="margin: 0 0 20px 0">部署</n-text>
     <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
 
-    <n-space align="center" style="margin-bottom: 8px">
+    <!-- 选择栏 -->
+    <n-space align="center" style="margin-bottom: 12px">
       <n-checkbox
         :checked="allSelected"
         :indeterminate="allIndeterminate"
@@ -81,17 +85,15 @@ function onDone() {
       >
         <n-text strong>全选</n-text>
       </n-checkbox>
-      <n-text depth="3">已选 {{ selectedApps.length }}/{{ apps.length }} 个应用</n-text>
+      <n-text depth="3">已选 {{ selectedApps.length }}/{{ apps.length }} 个应用 &mdash; 点击卡片选择</n-text>
     </n-space>
 
-    <n-checkbox-group v-model:value="selectedApps">
-      <n-space vertical>
-        <n-checkbox v-for="app in apps" :key="app.name" :value="app.name">
-          <n-text strong>{{ app.name }}</n-text>
-          <n-text depth="3"> &mdash; {{ app.description }}</n-text>
-        </n-checkbox>
-      </n-space>
-    </n-checkbox-group>
+    <!-- 应用卡片网格 -->
+    <AppCardGrid
+      v-model:selected="selectedApps"
+      :apps="apps"
+      empty-text="暂无可部署应用"
+    />
 
     <n-divider />
 

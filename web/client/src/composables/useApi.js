@@ -47,6 +47,15 @@ export async function fetchApps() {
   return await res.json()
 }
 
+export async function fetchBackups() {
+  const res = await fetchWithError('/api/backups')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.message || `获取备份列表失败 (${res.status})`)
+  }
+  return await res.json()
+}
+
 export async function fetchWebdavSettings() {
   const res = await fetchWithError('/api/settings/webdav')
   if (!res.ok) {

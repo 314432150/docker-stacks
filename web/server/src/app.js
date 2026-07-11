@@ -9,6 +9,7 @@ import restoreRoutes from './routes/restore.js'
 import deployRoutes from './routes/deploy.js'
 import eventsRoutes from './routes/events.js'
 import settingsRoutes from './routes/settings.js'
+import backupsRoutes from './routes/backups.js'
 
 export async function buildApp(opts = {}) {
   const fastify = Fastify({
@@ -55,6 +56,7 @@ export async function buildApp(opts = {}) {
   await fastify.register(deployRoutes)
   await fastify.register(eventsRoutes)
   await fastify.register(settingsRoutes)
+  await fastify.register(backupsRoutes)
 
   return fastify
 }

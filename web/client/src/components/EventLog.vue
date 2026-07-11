@@ -68,15 +68,15 @@ onUnmounted(() => {
 })
 
 function getLabel(event) {
-  const cfg = typeConfig[event.type]
-  if (!cfg) return event.type
-
   if (event.type === 'progress') return event.step || 'progress'
-  if (event.type === 'ok') return event.app || 'ok'
-  if (event.type === 'error') return event.msg || 'error'
-  if (event.type === 'done') return `成功 ${event.success}, 失败 ${event.fail}`
-  if (event.type === 'start') return `应用: ${(event.apps || []).join(', ')}`
-  return cfg.label
+  if (event.type === 'ok')     return '备份文件已生成'
+  if (event.type === 'error')  return event.msg || 'error'
+  if (event.type === 'done') {
+    if ('file' in event) return `已保存 ${event.file}` + (event.size ? ` (${event.size})` : '')
+    return `成功 ${event.success || 0}, 失败 ${event.fail || 0}`
+  }
+  if (event.type === 'start')  return `应用: ${(event.apps || []).join(', ')}`
+  return (typeConfig[event.type] || {}).label || event.type
 }
 </script>
 

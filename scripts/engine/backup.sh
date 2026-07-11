@@ -54,6 +54,7 @@ _cleanup_old_backups() {
         local old="${files[$i]}"
         local name; name="$(basename "$old")"
         rm -f "$old" 2>/dev/null || true
+        rm -f "${old}.json" 2>/dev/null || true
         _emit "{\"type\":\"progress\",\"step\":\"清理旧备份: ${name}\"}"
     done
 }
@@ -122,9 +123,30 @@ cmd_backup() {
         pure_apps+=("$(_extract_app_name "$entry")")
     done
 
+    # 构建备份文件名（Linux 文件名最长 255 字节，留 15 字节余量）
+    local max_fn=240
     local app_suffix
     app_suffix="$(printf '_%s' "${pure_apps[@]}")"
-    local archive_name="${stamp}${app_suffix}.tar.gz"
+    local candidate="${stamp}${app_suffix}.tar.gz"
+
+    local archive_name
+    if [[ ${#candidate} -le $max_fn ]]; then
+        archive_name="$candidate"
+    else
+        # 超限：截断 app 列表，附加 sha256 前 8 位保证唯一
+        local hash
+        hash="$(printf '%s' "${app_suffix}" | sha256sum | cut -c1-8)"
+        local short_suffix=""
+        for a in "${pure_apps[@]}"; do
+            local trial="${stamp}${short_suffix}_${a}_...+${hash}.tar.gz"
+            if [[ ${#trial} -le $max_fn ]]; then
+                short_suffix="${short_suffix}_${a}"
+            else
+                break
+            fi
+        done
+        archive_name="${stamp}${short_suffix}_...+${hash}.tar.gz"
+    fi
     local archive="${BACKUP_ROOT}/${archive_name}"
 
     # 构建 JSON 数组字符串（仅纯 app 名）
@@ -173,6 +195,13 @@ cmd_backup() {
     if tar -czf "$archive" -C "$ROOT" "${paths[@]}" 2>"$error_file"; then
         local size; size="$(du -h "$archive" 2>/dev/null | cut -f1)"
         _emit "{\"type\":\"ok\",\"app\":\"${archive_name}\"}"
+
+        # ── 写入索引文件（供 API 快速查询，避免每次 tar -tzf） ──
+        local idx_file="${archive}.json"
+        local byte_size
+        byte_size="$(stat -c%s "$archive" 2>/dev/null || echo 0)"
+        printf '{"name":"%s","size":%d,"mtime":"%s","apps":%s}\n' \
+            "$archive_name" "$byte_size" "$(date -Iseconds)" "$apps_json" > "$idx_file"
 
         # ── 上传到 WebDAV ──
         local upload_ok=true

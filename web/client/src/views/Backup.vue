@@ -2,20 +2,21 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  NText, NCheckboxGroup, NCheckbox, NSwitch, NInputNumber,
-  NButton, NSpace, NAlert, NDivider, NCollapse, NCollapseItem, NTag,
+  NText, NCheckbox, NSwitch, NInputNumber,
+  NButton, NSpace, NAlert, NDivider,
 } from 'naive-ui'
 import { fetchApps, runBackup } from '../composables/useApi.js'
 import { getSSEUrl } from '../composables/useSSE.js'
+import AppCardGrid from '../components/AppCardGrid.vue'
 import EventLog from '../components/EventLog.vue'
 
 const route = useRoute()
 const apps = ref([])
 const loading = ref(false)
 const selectedApps = ref([])
-const selectedDirs = ref({})          // { appName: [dirPath, ...] }
+const selectedDirs = ref({})
 const enableUpload = ref(false)
-const keepCount = ref(0)
+const keepCount = ref(7)
 const error = ref('')
 const taskId = ref('')
 const sseUrl = ref('')
@@ -47,33 +48,29 @@ async function loadApps() {
     if (preSelect.value.length) {
       selectedApps.value = preSelect.value
     }
-    // 初始化目录选择：默认选中所有 recommended 目录
-    const initDirs = {}
-    for (const app of data.apps) {
-      initDirs[app.name] = app.dirs.filter(d => d.recommended).map(d => d.path)
-    }
-    selectedDirs.value = initDirs
   } catch (e) {
     error.value = e.message
   }
 }
 loadApps()
 
-// ── 当 app 被取消选中时，清除其目录选择 ──
-function isAppDirSelected(appName, dirPath) {
-  return (selectedDirs.value[appName] || []).includes(dirPath)
-}
+// ── 选中 app 时自动勾选该 app 的推荐目录；取消时清除 ──
+watch(selectedApps, (newVal, oldVal) => {
+  const added = newVal.filter(a => !oldVal.includes(a))
+  const removed = oldVal.filter(a => !newVal.includes(a))
 
-function toggleAppDir(appName, dirPath) {
-  const current = selectedDirs.value[appName] || []
-  if (current.includes(dirPath)) {
-    selectedDirs.value[appName] = current.filter(d => d !== dirPath)
-  } else {
-    selectedDirs.value[appName] = [...current, dirPath]
+  for (const name of added) {
+    const app = apps.value.find(a => a.name === name)
+    if (app && !selectedDirs.value[name]) {
+      selectedDirs.value[name] = app.dirs.filter(d => d.recommended).map(d => d.path)
+    }
   }
-}
+  for (const name of removed) {
+    delete selectedDirs.value[name]
+  }
+}, { deep: false })
 
-// ── 构建提交用的 dirs map（仅保留已选应用 + 非空 dirs） ──
+// ── 构建提交用的 dirs map ──
 function buildDirsPayload() {
   const payload = {}
   for (const name of selectedApps.value) {
@@ -117,8 +114,8 @@ function onDone() {
     <n-text tag="h2" style="margin: 0 0 20px 0">备份</n-text>
     <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
 
-    <!-- 应用选择 -->
-    <n-space align="center" style="margin-bottom: 8px">
+    <!-- 选择栏 -->
+    <n-space align="center" style="margin-bottom: 12px">
       <n-checkbox
         :checked="allSelected"
         :indeterminate="allIndeterminate"
@@ -126,47 +123,29 @@ function onDone() {
       >
         <n-text strong>全选</n-text>
       </n-checkbox>
-      <n-text depth="3">已选 {{ selectedApps.length }}/{{ apps.length }} 个应用</n-text>
+      <n-text depth="3">已选 {{ selectedApps.length }}/{{ apps.length }} 个应用 &mdash; 点击卡片选择</n-text>
     </n-space>
 
-    <n-checkbox-group v-model:value="selectedApps">
-      <n-space vertical>
-        <div v-for="app in apps" :key="app.name">
-          <n-checkbox :value="app.name">
-            <n-text strong>{{ app.name }}</n-text>
-            <n-text depth="3"> &mdash; {{ app.description }}</n-text>
-          </n-checkbox>
-          <!-- 目录选择（仅选中时展示） -->
-          <div v-if="selectedApps.includes(app.name) && app.dirs.length > 0"
-               style="margin-left: 32px; margin-top: 4px">
-            <n-space vertical size="small">
-              <n-text depth="3" style="font-size: 12px">备份目录:</n-text>
-              <n-checkbox
-                v-for="dir in app.dirs"
-                :key="dir.path"
-                :checked="isAppDirSelected(app.name, dir.path)"
-                @update:checked="toggleAppDir(app.name, dir.path)"
-                size="small"
-              >
-                <n-text depth="2" style="font-size: 13px">{{ dir.path }}</n-text>
-                <n-tag v-if="dir.recommended" size="tiny" type="success" style="margin-left: 4px">推荐</n-tag>
-                <n-tag v-if="!dir.exists" size="tiny" type="warning" style="margin-left: 4px">不存在</n-tag>
-              </n-checkbox>
-            </n-space>
-          </div>
-        </div>
-      </n-space>
-    </n-checkbox-group>
+    <!-- 应用卡片网格 -->
+    <AppCardGrid
+      v-model:selected="selectedApps"
+      v-model:selected-dirs="selectedDirs"
+      :apps="apps"
+      :show-dirs="true"
+      empty-text="暂无可备份应用，请先部署"
+    />
 
     <n-divider />
 
+    <!-- 操作选项 & 按钮 -->
     <n-space align="center" style="margin-bottom: 16px">
       <n-text>上传到 WebDAV</n-text>
       <n-switch v-model:value="enableUpload" />
     </n-space>
     <n-space align="center" style="margin-bottom: 16px">
-      <n-text>保留本地备份数</n-text>
+      <n-text>本地最多保留</n-text>
       <n-input-number v-model:value="keepCount" :min="0" :max="100" style="width: 100px" />
+      <n-text depth="3">份（0 = 不限）</n-text>
     </n-space>
 
     <n-button type="primary" :loading="loading" :disabled="selectedApps.length === 0" @click="doBackup">
