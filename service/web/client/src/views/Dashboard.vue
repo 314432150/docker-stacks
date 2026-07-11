@@ -1,9 +1,14 @@
 <script setup>
-import { ref, onActivated, h } from 'vue'
+import { ref, onActivated, onDeactivated, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { NCard, NButton, NTag, NSpace, NGrid, NGi, NText, NAlert } from 'naive-ui'
 import { fetchApps, fetchContainerStatus } from '../composables/useApi.js'
 import SkeletonCards from '../components/SkeletonCards.vue'
+
+// ── 容器状态轮询配置 ──
+// 用户停留在 Dashboard 时，每隔此时间拉取一次容器状态，
+// 切到其他页时停止（KeepAlive 的 onDeactivated），切回时恢复。
+const STATUS_POLL_INTERVAL = 15_000
 
 const router = useRouter()
 const apps = ref([])
@@ -11,6 +16,7 @@ const privilege = ref('')
 const loading = ref(true)
 const error = ref('')
 const containerStatus = ref({})
+let statusTimer = null
 
 async function load(force = false) {
   loading.value = true
@@ -27,6 +33,28 @@ async function load(force = false) {
     error.value = e.message
   } finally {
     loading.value = false
+  }
+}
+
+/** 仅刷新容器状态（轮询用，不重拉 apps 避免缓存浪费） */
+async function refreshStatus() {
+  try {
+    const statusData = await fetchContainerStatus()
+    containerStatus.value = statusData.containers || {}
+  } catch {
+    // 静默失败：轮询期间容许偶发错误
+  }
+}
+
+function startStatusPolling() {
+  if (statusTimer) return
+  statusTimer = setInterval(refreshStatus, STATUS_POLL_INTERVAL)
+}
+
+function stopStatusPolling() {
+  if (statusTimer) {
+    clearInterval(statusTimer)
+    statusTimer = null
   }
 }
 
@@ -48,7 +76,14 @@ function statusText(appName) {
   return s.state
 }
 
-onActivated(() => load())
+onActivated(() => {
+  load()
+  startStatusPolling()
+})
+
+onDeactivated(() => {
+  stopStatusPolling()
+})
 
 function goBackup(app) {
   router.push({ path: '/backup', query: { app: app.name } })
