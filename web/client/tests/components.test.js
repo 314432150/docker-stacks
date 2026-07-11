@@ -8,6 +8,7 @@ import Backup from '../src/views/Backup.vue'
 import Restore from '../src/views/Restore.vue'
 import Deploy from '../src/views/Deploy.vue'
 import EventLog from '../src/components/EventLog.vue'
+import { resetCache } from '../src/composables/useApi.js'
 
 // 模拟 fetch
 global.fetch = vi.fn()
@@ -33,6 +34,7 @@ function mountWithPlugins(component, route = '/') {
 describe('Dashboard.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetCache()
   })
 
   it('挂载后调用 fetch /api/apps', async () => {
@@ -55,14 +57,15 @@ describe('Dashboard.vue', () => {
     expect(fetch).toHaveBeenCalledWith('/api/apps', expect.anything())
   })
 
-  it('加载中显示 spinner', async () => {
+  it('加载中显示骨架屏', async () => {
     fetch.mockImplementationOnce(() => new Promise(() => { /* 永不 resolve */ }))
 
     const wrapper = mountWithPlugins(Dashboard)
     await new Promise((r) => setTimeout(r, 50))
 
-    // 应该包含 loading 状态
-    expect(wrapper.find('.n-spin-container').exists()).toBe(true)
+    // 骨架屏使用 n-card + n-skeleton，而非 n-spin
+    expect(wrapper.find('.n-card').exists()).toBe(true)
+    expect(wrapper.find('.n-skeleton').exists()).toBe(true)
   })
 
   it('显示应用卡片', async () => {
@@ -120,6 +123,7 @@ describe('EventLog.vue', () => {
 describe('Backup.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetCache()
   })
 
   it('挂载后加载应用列表', async () => {

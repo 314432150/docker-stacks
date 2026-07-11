@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted, h } from 'vue'
+import { ref, onMounted, onActivated, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { NCard, NButton, NTag, NSpace, NGrid, NGi, NSpin, NText, NAlert } from 'naive-ui'
+import { NCard, NButton, NTag, NSpace, NGrid, NGi, NText, NAlert } from 'naive-ui'
 import { fetchApps } from '../composables/useApi.js'
+import SkeletonCards from '../components/SkeletonCards.vue'
 
 const router = useRouter()
 const apps = ref([])
@@ -10,11 +11,11 @@ const privilege = ref('')
 const loading = ref(true)
 const error = ref('')
 
-async function load() {
+async function load(force = false) {
   loading.value = true
   error.value = ''
   try {
-    const data = await fetchApps()
+    const data = await fetchApps({ force })
     apps.value = data.apps
     privilege.value = data.engine?.privilege || 'unknown'
   } catch (e) {
@@ -24,7 +25,9 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(() => load())
+// KeepAlive 激活时静默刷新（缓存命中，瞬时返回）
+onActivated(() => load())
 
 function goBackup(app) {
   router.push({ path: '/backup', query: { app: app.name } })
@@ -42,13 +45,17 @@ function goDeploy(app) {
         <n-tag :type="privilege === 'root' ? 'success' : 'warning'">
           {{ privilege === 'root' ? '管理员权限' : '普通用户' }}
         </n-tag>
-        <n-button size="small" @click="load">刷新</n-button>
+        <n-button size="small" @click="load(true)">刷新</n-button>
       </n-space>
     </n-space>
 
     <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
 
-    <n-spin :show="loading">
+    <!-- 加载骨架 -->
+    <SkeletonCards v-if="loading" :count="6" />
+
+    <!-- 真实内容 -->
+    <template v-else>
       <n-grid :cols="3" :x-gap="12" :y-gap="12" responsive="screen">
         <n-gi v-for="app in apps" :key="app.name">
           <n-card :title="app.name" size="small" hoverable>
@@ -65,7 +72,7 @@ function goDeploy(app) {
           </n-card>
         </n-gi>
       </n-grid>
-      <n-text v-if="!loading && apps.length === 0" depth="3">暂无应用</n-text>
-    </n-spin>
+      <n-text v-if="apps.length === 0" depth="3">暂无应用</n-text>
+    </template>
   </div>
 </template>

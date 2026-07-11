@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onActivated } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NText, NCheckbox, NSwitch, NInputNumber,
@@ -8,10 +8,12 @@ import {
 import { fetchApps, runBackup } from '../composables/useApi.js'
 import { getSSEUrl } from '../composables/useSSE.js'
 import AppCardGrid from '../components/AppCardGrid.vue'
+import SkeletonCards from '../components/SkeletonCards.vue'
 import EventLog from '../components/EventLog.vue'
 
 const route = useRoute()
 const apps = ref([])
+const pageLoading = ref(true)
 const loading = ref(false)
 const selectedApps = ref([])
 const selectedDirs = ref({})
@@ -50,9 +52,12 @@ async function loadApps() {
     }
   } catch (e) {
     error.value = e.message
+  } finally {
+    pageLoading.value = false
   }
 }
-loadApps()
+onMounted(loadApps)
+onActivated(loadApps)
 
 // ── 选中 app 时自动勾选该 app 的推荐目录；取消时清除 ──
 watch(selectedApps, (newVal, oldVal) => {
@@ -114,39 +119,48 @@ function onDone() {
     <n-text tag="h2" style="margin: 0 0 20px 0">备份</n-text>
     <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
 
-    <!-- 选择栏 -->
-    <n-space align="center" style="margin-bottom: 12px">
-      <n-checkbox
-        :checked="allSelected"
-        :indeterminate="allIndeterminate"
-        @update:checked="toggleSelectAll"
-      >
-        <n-text strong>全选</n-text>
-      </n-checkbox>
-      <n-text depth="3">已选 {{ selectedApps.length }}/{{ apps.length }} 个应用 &mdash; 点击卡片选择</n-text>
-    </n-space>
+    <!-- 加载骨架 -->
+    <template v-if="pageLoading">
+      <n-skeleton text style="width: 320px; margin-bottom: 12px" />
+      <SkeletonCards :count="6" />
+      <n-divider />
+      <n-skeleton text style="width: 120px" />
+      <n-skeleton text style="width: 130px; margin-top: 12px" />
+    </template>
 
-    <!-- 应用卡片网格 -->
-    <AppCardGrid
-      v-model:selected="selectedApps"
-      v-model:selected-dirs="selectedDirs"
-      :apps="apps"
-      :show-dirs="true"
-      empty-text="暂无可备份应用，请先部署"
-    />
+    <!-- 真实内容 -->
+    <template v-else>
+      <n-space align="center" style="margin-bottom: 12px">
+        <n-checkbox
+          :checked="allSelected"
+          :indeterminate="allIndeterminate"
+          @update:checked="toggleSelectAll"
+        >
+          <n-text strong>全选</n-text>
+        </n-checkbox>
+        <n-text depth="3">已选 {{ selectedApps.length }}/{{ apps.length }} 个应用 &mdash; 点击卡片选择</n-text>
+      </n-space>
 
-    <n-divider />
+      <AppCardGrid
+        v-model:selected="selectedApps"
+        v-model:selected-dirs="selectedDirs"
+        :apps="apps"
+        :show-dirs="true"
+        empty-text="暂无可备份应用，请先部署"
+      />
 
-    <!-- 操作选项 & 按钮 -->
-    <n-space align="center" style="margin-bottom: 16px">
-      <n-text>上传到 WebDAV</n-text>
-      <n-switch v-model:value="enableUpload" />
-    </n-space>
-    <n-space align="center" style="margin-bottom: 16px">
-      <n-text>本地最多保留</n-text>
-      <n-input-number v-model:value="keepCount" :min="0" :max="100" style="width: 100px" />
-      <n-text depth="3">份（0 = 不限）</n-text>
-    </n-space>
+      <n-divider />
+
+      <n-space align="center" style="margin-bottom: 16px">
+        <n-text>上传到 WebDAV</n-text>
+        <n-switch v-model:value="enableUpload" />
+      </n-space>
+      <n-space align="center" style="margin-bottom: 16px">
+        <n-text>本地最多保留</n-text>
+        <n-input-number v-model:value="keepCount" :min="0" :max="100" style="width: 100px" />
+        <n-text depth="3">份（0 = 不限）</n-text>
+      </n-space>
+    </template>
 
     <n-button type="primary" :loading="loading" :disabled="selectedApps.length === 0" @click="doBackup">
       开始备份

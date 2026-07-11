@@ -1,5 +1,5 @@
 <script setup>
-import { h, ref, onMounted, onUnmounted, computed, watchEffect } from 'vue'
+import { h, ref, onMounted, onUnmounted, computed, watchEffect, KeepAlive } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import {
   NLayout, NLayoutHeader, NLayoutContent, NMenu, NText, NSpace,
@@ -97,7 +97,11 @@ const menuItems = [
         </n-space>
       </n-layout-header>
       <n-layout-content content-style="padding: 24px; max-width: 1200px; margin: 0 auto">
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <KeepAlive>
+            <component :is="Component" />
+          </KeepAlive>
+        </RouterView>
       </n-layout-content>
     </n-layout>
   </n-config-provider>

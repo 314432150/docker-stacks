@@ -72,9 +72,9 @@ test.describe('还原页 (Restore)', () => {
     await page.waitForSelector('h2')
     await expect(page.locator('h2')).toContainText('还原')
 
-    // 应该有表格或空状态
+    // 应该有备份卡片或空状态
     await expect(
-      page.locator('.n-data-table, .n-empty')
+      page.locator('.backup-card, .n-empty').first()
     ).toBeVisible({ timeout: 5000 })
   })
 

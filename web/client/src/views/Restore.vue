@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onActivated } from 'vue'
 import {
   NText, NCheckbox, NButton, NSpace, NAlert, NDivider,
   NCard, NGrid, NGi, NIcon, NEmpty,
@@ -8,10 +8,12 @@ import { CheckmarkCircle } from '@vicons/ionicons5'
 import { fetchApps, fetchBackups, runRestore } from '../composables/useApi.js'
 import { getSSEUrl } from '../composables/useSSE.js'
 import AppCardGrid from '../components/AppCardGrid.vue'
+import SkeletonCards from '../components/SkeletonCards.vue'
 import EventLog from '../components/EventLog.vue'
 
 const apps = ref([])
 const backups = ref([])
+const pageLoading = ref(true)
 const loading = ref(false)
 const archive = ref('')
 const selectedApps = ref([])
@@ -69,9 +71,12 @@ async function loadData() {
     apps.value = appData.apps || []
   } catch (e) {
     error.value = e.message
+  } finally {
+    pageLoading.value = false
   }
 }
-loadData()
+onMounted(loadData)
+onActivated(loadData)
 
 // ── 格式化文件大小 ──
 function fmtSize(bytes) {
@@ -121,75 +126,78 @@ function onDone() {
     <n-text tag="h2" style="margin: 0 0 20px 0">还原</n-text>
     <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
 
-    <!-- Step 1: 选择备份文件 — 卡片网格 -->
-    <n-text depth="3" style="margin-bottom: 8px; display: block">
-      步骤一：选择备份文件（共 {{ backups.length }} 个）
-    </n-text>
+    <!-- 加载骨架 -->
+    <template v-if="pageLoading">
+      <n-skeleton text style="width: 260px; margin-bottom: 8px" />
+      <SkeletonCards :count="6" />
+    </template>
 
-    <n-empty v-if="backups.length === 0" description="暂无备份文件" style="margin-bottom: 16px" />
-
-    <n-grid v-else :cols="3" :x-gap="12" :y-gap="12" responsive="screen" style="grid-auto-rows: 1fr">
-      <n-gi
-        v-for="b in backups"
-        :key="b.name"
-        style="display: flex; flex-direction: column"
-      >
-        <n-card
-          :class="['backup-card', { 'backup-card--selected': archive === b.name }]"
-          size="small"
-          hoverable
-          @click="archive = b.name"
-        >
-          <!-- 右上角选中标记 -->
-          <template v-if="archive === b.name" #header-extra>
-            <n-icon size="20" color="#18a058" :component="CheckmarkCircle" />
-          </template>
-
-          <!-- 标题：时间 -->
-          <template #header>
-            <n-text strong>{{ fmtTime(b.mtime) }}</n-text>
-          </template>
-
-          <!-- 应用列表 -->
-          <n-text depth="3" style="font-size: 13px">
-            {{ (b.apps || []).join(', ') || '无应用' }}
-          </n-text>
-
-          <!-- 底部：大小 -->
-          <template #footer>
-            <n-text depth="3" style="font-size: 12px">{{ fmtSize(b.size) }}</n-text>
-          </template>
-        </n-card>
-      </n-gi>
-    </n-grid>
-
-    <!-- Step 2: 选择应用 — 卡片网格 -->
-    <template v-if="archive">
-      <n-divider />
-
+    <!-- 真实内容 -->
+    <template v-else>
       <n-text depth="3" style="margin-bottom: 8px; display: block">
-        步骤二：选择要还原的应用
+        步骤一：选择备份文件（共 {{ backups.length }} 个）
       </n-text>
 
-      <n-space align="center" style="margin-bottom: 12px">
-        <n-checkbox
-          :checked="allSelected"
-          :indeterminate="allIndeterminate"
-          @update:checked="toggleSelectAll"
+      <n-empty v-if="backups.length === 0" description="暂无备份文件" style="margin-bottom: 16px" />
+
+      <n-grid v-else :cols="3" :x-gap="12" :y-gap="12" responsive="screen" style="grid-auto-rows: 1fr">
+        <n-gi
+          v-for="b in backups"
+          :key="b.name"
+          style="display: flex; flex-direction: column"
         >
-          <n-text strong>全选</n-text>
-        </n-checkbox>
-        <n-text depth="3">已选 {{ selectedApps.length }}/{{ backupApps.length }} 个应用</n-text>
-        <n-tag size="small" type="info">{{ archive }}</n-tag>
-      </n-space>
+          <n-card
+            :class="['backup-card', { 'backup-card--selected': archive === b.name }]"
+            size="small"
+            hoverable
+            @click="archive = b.name"
+          >
+            <template v-if="archive === b.name" #header-extra>
+              <n-icon size="20" color="#18a058" :component="CheckmarkCircle" />
+            </template>
 
-      <AppCardGrid
-        v-model:selected="selectedApps"
-        :apps="backupAppsForGrid"
-        empty-text="备份中无应用数据"
-      />
+            <template #header>
+              <n-text strong>{{ fmtTime(b.mtime) }}</n-text>
+            </template>
 
-      <n-divider />
+            <n-text depth="3" style="font-size: 13px">
+              {{ (b.apps || []).join(', ') || '无应用' }}
+            </n-text>
+
+            <template #footer>
+              <n-text depth="3" style="font-size: 12px">{{ fmtSize(b.size) }}</n-text>
+            </template>
+          </n-card>
+        </n-gi>
+      </n-grid>
+
+      <template v-if="archive">
+        <n-divider />
+
+        <n-text depth="3" style="margin-bottom: 8px; display: block">
+          步骤二：选择要还原的应用
+        </n-text>
+
+        <n-space align="center" style="margin-bottom: 12px">
+          <n-checkbox
+            :checked="allSelected"
+            :indeterminate="allIndeterminate"
+            @update:checked="toggleSelectAll"
+          >
+            <n-text strong>全选</n-text>
+          </n-checkbox>
+          <n-text depth="3">已选 {{ selectedApps.length }}/{{ backupApps.length }} 个应用</n-text>
+          <n-tag size="small" type="info">{{ archive }}</n-tag>
+        </n-space>
+
+        <AppCardGrid
+          v-model:selected="selectedApps"
+          :apps="backupAppsForGrid"
+          empty-text="备份中无应用数据"
+        />
+
+        <n-divider />
+      </template>
     </template>
 
     <n-button
