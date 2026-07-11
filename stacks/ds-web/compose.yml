@@ -1,0 +1,65 @@
+# ==================== ds-web 管理界面 ====================
+# 提供 Web 管理面板，支持通过浏览器备份/还原/部署 docker-stacks 应用
+services:
+  ds-web:
+    image: node:22
+    container_name: ds-web
+    restart: unless-stopped
+
+    # 以 root 运行：engine.sh 需要 root 权限操作容器数据文件（chmod/chown 等）
+    user: "0:0"
+
+    # 端口映射：宿主机 3001 → 容器 3001
+    ports:
+      - "3001:3001"
+
+    # 工作目录：后端入口所在目录
+    working_dir: /srv/docker-stacks/web/server
+
+    volumes:
+      # 挂载整个 docker-stacks 仓库（引擎脚本、应用栈、备份目录）
+      - /srv/docker-stacks:/srv/docker-stacks
+
+      # Docker socket：deploy 命令需要执行 docker compose
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # 容器内 node_modules 独立存储（不污染宿主机，避免平台差异）
+      - ds-web-node-modules:/srv/docker-stacks/web/server/node_modules
+
+    # 环境变量：从项目根目录 global.env 加载（相对路径：../../ = /srv/docker-stacks）
+    env_file:
+      - ../../global.env
+
+    # 额外覆盖：确保端口配置正确
+    environment:
+      PORT: "3001"
+      HOST: "0.0.0.0"
+      HOME: "/root"
+
+    # 启动命令：首次运行安装依赖，之后直接启动
+    command: >
+      sh -c '
+        if [ ! -d node_modules/fastify ]; then
+          echo "[ds-web] 首次启动，安装依赖..."
+          npm install --omit=dev
+        fi
+        echo "[ds-web] 启动 Fastify 服务端..."
+        exec node src/app.js
+      '
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:3001/api/apps"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  # 命名卷：跨重启持久化 node_modules
+  ds-web-node-modules:

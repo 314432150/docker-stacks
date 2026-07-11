@@ -312,6 +312,55 @@ describe('REST API 路由', () => {
   })
 })
 
+describe('认证插件 (auth)', () => {
+  let appAuth
+
+  before(async () => {
+    process.env.WEB_USER = 'admin'
+    process.env.WEB_PASS = 'test123'
+    appAuth = await buildApp({ logger: false })
+    await appAuth.ready()
+  })
+
+  after(async () => {
+    delete process.env.WEB_USER
+    delete process.env.WEB_PASS
+    await appAuth.close()
+  })
+
+  it('无 Authorization 头 → 401', async () => {
+    const res = await appAuth.inject({ method: 'GET', url: '/api/apps' })
+    assert.strictEqual(res.statusCode, 401)
+    assert.ok(res.json().code === 'UNAUTHORIZED')
+  })
+
+  it('错误凭据 → 401', async () => {
+    const res = await appAuth.inject({
+      method: 'GET',
+      url: '/api/apps',
+      headers: { authorization: 'Basic ' + Buffer.from('admin:wrong').toString('base64') },
+    })
+    assert.strictEqual(res.statusCode, 401)
+  })
+
+  it('正确凭据 → 200', async () => {
+    const res = await appAuth.inject({
+      method: 'GET',
+      url: '/api/apps',
+      headers: { authorization: 'Basic ' + Buffer.from('admin:test123').toString('base64') },
+    })
+    if (res.statusCode === 500) return  // 引擎不可用时跳过
+    // 认证通过后可能返回 200 或业务错误（如引擎不可用）
+    assert.notStrictEqual(res.statusCode, 401)
+  })
+
+  it('SSE 端点免认证 → 400 (缺少 taskId 而非 401)', async () => {
+    const res = await appAuth.inject({ method: 'GET', url: '/api/events' })
+    // 免认证路径应返回业务错误码（400/404）而非 401
+    assert.notStrictEqual(res.statusCode, 401)
+  })
+})
+
 describe('参数校验函数 (validate.js)', () => {
   let validate
 

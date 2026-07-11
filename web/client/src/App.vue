@@ -112,4 +112,18 @@ const menuItems = [
 html.dark body {
   background-color: #101014;
 }
+
+/* ── 移动端响应式 ── */
+@media (max-width: 640px) {
+  .n-layout-header .n-space {
+    padding: 0 12px !important;
+  }
+  .n-layout-content {
+    --n-content-padding: 12px !important;
+  }
+  /* 水平菜单在小屏幕上隐藏部分项（Naive UI 自动处理），减小字体 */
+  .n-menu.n-menu--horizontal {
+    font-size: 13px;
+  }
+}
 </style>

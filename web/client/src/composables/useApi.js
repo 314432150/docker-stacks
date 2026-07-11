@@ -123,3 +123,21 @@ export async function saveWebdavSettings({ url, user, pass }) {
   }
   return await res.json()
 }
+
+export async function testWebdavConnection() {
+  const res = await fetchWithError('/api/settings/webdav/test', { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.message || `WebDAV 连接测试失败 (${res.status})`)
+  }
+  return await res.json()
+}
+
+export async function fetchContainerStatus() {
+  const res = await fetchWithError('/api/apps/status')
+  if (!res.ok) {
+    // 静默失败：容器状态查询是辅助功能
+    return { containers: {} }
+  }
+  return await res.json()
+}

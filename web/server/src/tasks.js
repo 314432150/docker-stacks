@@ -1,8 +1,13 @@
 // ── 任务注册中心 ──
 // 内存中管理 task 状态、事件历史和 SSE 广播
+// 完成后自动写入 backups/.history.jsonl 持久化
 
 import { EventEmitter } from 'node:events'
-import { TASK_TTL_MS } from './config.js'
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { TASK_TTL_MS, BACKUP_ROOT } from './config.js'
+
+const HISTORY_FILE = join(BACKUP_ROOT, '.history.jsonl')
 
 /** @type {Map<string, Task>} */
 const tasks = new Map()
@@ -49,6 +54,29 @@ export function pushEvent(taskId, event) {
  * @param {string} taskId
  * @param {'running'|'success'|'failed'} status
  */
+/**
+ * 将已完成的任务追加写入历史文件
+ */
+function persistHistory(task) {
+  try {
+    if (!existsSync(BACKUP_ROOT)) {
+      mkdirSync(BACKUP_ROOT, { recursive: true })
+    }
+    const entry = {
+      taskId: task.taskId,
+      type: task.type,
+      status: task.status,
+      createdAt: task.createdAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      eventCount: task.history.length,
+      summary: task.history.length > 0 ? task.history[0].msg || task.history[0].type : null,
+    }
+    appendFileSync(HISTORY_FILE, JSON.stringify(entry) + '\n', 'utf-8')
+  } catch {
+    // 历史记录写入失败不影响主流程
+  }
+}
+
 export function setTaskStatus(taskId, status) {
   const task = tasks.get(taskId)
   if (!task) return
@@ -56,9 +84,11 @@ export function setTaskStatus(taskId, status) {
   task.status = status
 
   if (status === 'success' || status === 'failed') {
+    // 持久化历史记录
+    persistHistory(task)
     // 发送关闭事件
     task.emitter.emit('event', { type: 'closed', taskId })
-    // 5 分钟后清理
+    // 5 分钟后清理内存中的任务
     task.cleanupTimer = setTimeout(() => {
       cleanupTask(taskId)
     }, TASK_TTL_MS)
@@ -96,6 +126,24 @@ export function hasRunningTask() {
     if (task.status === 'running' || task.status === 'pending') return true
   }
   return false
+}
+
+/**
+ * 读取最近 N 条历史记录
+ * @param {number} limit — 默认 50
+ * @returns {object[]}
+ */
+export function getHistory(limit = 50) {
+  try {
+    if (!existsSync(HISTORY_FILE)) return []
+    const content = readFileSync(HISTORY_FILE, 'utf-8')
+    const lines = content.trim().split('\n').filter(Boolean)
+    return lines.slice(-limit).map(line => {
+      try { return JSON.parse(line) } catch { return null }
+    }).filter(Boolean).reverse()
+  } catch {
+    return []
+  }
 }
 
 export { tasks }

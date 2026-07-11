@@ -3,12 +3,14 @@ import { ref, onMounted } from 'vue'
 import {
   NText, NCard, NInput, NButton, NSpace, NAlert, NSpin, NDivider, NTag,
 } from 'naive-ui'
-import { fetchWebdavSettings, saveWebdavSettings } from '../composables/useApi.js'
+import { fetchWebdavSettings, saveWebdavSettings, testWebdavConnection } from '../composables/useApi.js'
 
 const loading = ref(true)
 const saving = ref(false)
+const testing = ref(false)
 const error = ref('')
 const success = ref('')
+const testResult = ref(null) // { success: boolean, message: string }
 const configured = ref(false)
 
 const url = ref('')
@@ -35,6 +37,7 @@ async function save() {
   saving.value = true
   error.value = ''
   success.value = ''
+  testResult.value = null
   try {
     await saveWebdavSettings({
       url: url.value.trim(),
@@ -51,6 +54,20 @@ async function save() {
   }
 }
 
+async function testConnection() {
+  testing.value = true
+  error.value = ''
+  success.value = ''
+  testResult.value = null
+  try {
+    testResult.value = await testWebdavConnection()
+  } catch (e) {
+    testResult.value = { success: false, message: e.message }
+  } finally {
+    testing.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -60,6 +77,9 @@ onMounted(load)
 
     <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
     <n-alert v-if="success" type="success" style="margin-bottom: 16px">{{ success }}</n-alert>
+    <n-alert v-if="testResult" :type="testResult.success ? 'success' : 'warning'" style="margin-bottom: 16px">
+      {{ testResult.message }}
+    </n-alert>
 
     <n-card title="WebDAV 远程备份" size="small" style="max-width: 600px">
       <template #header-extra>
@@ -94,9 +114,14 @@ onMounted(load)
             />
           </n-space>
 
-          <n-button type="primary" :loading="saving" @click="save">
-            保存
-          </n-button>
+          <n-space>
+            <n-button type="primary" :loading="saving" @click="save">
+              保存
+            </n-button>
+            <n-button :loading="testing" :disabled="!url || !user || !pass" @click="testConnection">
+              测试连接
+            </n-button>
+          </n-space>
         </n-space>
       </n-spin>
     </n-card>

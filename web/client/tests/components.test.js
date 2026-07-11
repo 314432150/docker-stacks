@@ -37,7 +37,15 @@ describe('Dashboard.vue', () => {
     resetCache()
   })
 
-  it('挂载后调用 fetch /api/apps', async () => {
+  // 辅助：mock 容器状态为未部署
+  function mockStatus() {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ containers: {} }),
+    })
+  }
+
+  it('挂载后调用 fetch /api/apps 和 /api/apps/status', async () => {
     fetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({
@@ -48,22 +56,23 @@ describe('Dashboard.vue', () => {
         ],
       }),
     })
+    mockStatus()
 
     const wrapper = mountWithPlugins(Dashboard)
-
-    // 等待异步加载
     await new Promise((r) => setTimeout(r, 100))
 
     expect(fetch).toHaveBeenCalledWith('/api/apps', expect.anything())
+    expect(fetch).toHaveBeenCalledWith('/api/apps/status', expect.anything())
   })
 
   it('加载中显示骨架屏', async () => {
-    fetch.mockImplementationOnce(() => new Promise(() => { /* 永不 resolve */ }))
+    // apps 永不 resolve，status 也永不 resolve
+    fetch.mockImplementationOnce(() => new Promise(() => {}))
+    fetch.mockImplementationOnce(() => new Promise(() => {}))
 
     const wrapper = mountWithPlugins(Dashboard)
     await new Promise((r) => setTimeout(r, 50))
 
-    // 骨架屏使用 n-card + n-skeleton，而非 n-spin
     expect(wrapper.find('.n-card').exists()).toBe(true)
     expect(wrapper.find('.n-skeleton').exists()).toBe(true)
   })
@@ -80,6 +89,7 @@ describe('Dashboard.vue', () => {
         ],
       }),
     })
+    mockStatus()
 
     const wrapper = mountWithPlugins(Dashboard)
     await new Promise((r) => setTimeout(r, 100))
@@ -89,16 +99,17 @@ describe('Dashboard.vue', () => {
   })
 
   it('API 错误时显示错误信息', async () => {
+    // apps 失败，status 成功
     fetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
       json: () => Promise.resolve({ error: true, message: 'Server error' }),
     })
+    mockStatus()
 
     const wrapper = mountWithPlugins(Dashboard)
     await new Promise((r) => setTimeout(r, 100))
 
-    // 验证错误提示存在
     expect(wrapper.text()).toContain('Server error')
   })
 })

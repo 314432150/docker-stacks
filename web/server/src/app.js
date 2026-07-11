@@ -3,6 +3,7 @@
 
 import Fastify from 'fastify'
 import { PORT, HOST, STATIC_DIR } from './config.js'
+import { addAuthHook } from './plugins/auth.js'
 import appsRoutes from './routes/apps.js'
 import backupRoutes from './routes/backup.js'
 import restoreRoutes from './routes/restore.js'
@@ -10,6 +11,8 @@ import deployRoutes from './routes/deploy.js'
 import eventsRoutes from './routes/events.js'
 import settingsRoutes from './routes/settings.js'
 import backupsRoutes from './routes/backups.js'
+import historyRoutes from './routes/history.js'
+import statusRoutes from './routes/status.js'
 
 export async function buildApp(opts = {}) {
   const fastify = Fastify({
@@ -49,6 +52,9 @@ export async function buildApp(opts = {}) {
     }
   })
 
+  // ── 认证钩子（根作用域，覆盖全部路由） ──
+  addAuthHook(fastify)
+
   // ── 注册路由 ──
   await fastify.register(appsRoutes)
   await fastify.register(backupRoutes)
@@ -57,6 +63,8 @@ export async function buildApp(opts = {}) {
   await fastify.register(eventsRoutes)
   await fastify.register(settingsRoutes)
   await fastify.register(backupsRoutes)
+  await fastify.register(historyRoutes)
+  await fastify.register(statusRoutes)
 
   return fastify
 }

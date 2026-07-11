@@ -2,6 +2,7 @@
 // 读取/写入 global.env 中的 WEBDAV_* 配置
 
 import { readFile, writeFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import { ROOT } from '../config.js'
 import { join } from 'node:path'
 
@@ -94,6 +95,62 @@ export default async function settingsRoutes(fastify) {
       return reply.code(500).send({
         error: true, code: 'SETTINGS_ERROR', message: `写入配置失败: ${err.message}`,
       })
+    }
+  })
+
+  // ── POST: 测试 WebDAV 连接 ──
+  fastify.post('/api/settings/webdav/test', async (_request, reply) => {
+    let settings
+    try {
+      settings = await parseWebdavSettings()
+    } catch (err) {
+      return reply.code(500).send({
+        error: true, code: 'SETTINGS_ERROR',
+        message: `读取配置失败: ${err.message}`,
+      })
+    }
+
+    const { WEBDAV_URL, WEBDAV_USER, WEBDAV_PASS } = settings
+    if (!WEBDAV_URL || !WEBDAV_USER || !WEBDAV_PASS) {
+      return reply.code(400).send({
+        error: true, code: 'NOT_CONFIGURED',
+        message: 'WebDAV 尚未完整配置（需要 URL、用户名、密码）',
+      })
+    }
+
+    // 使用 curl PROPFIND 测试连接（与 webdav_connection_test 逻辑一致）
+    const url = WEBDAV_URL.replace(/\/$/, '')
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const child = spawn('curl', [
+          '-s', '-o', '/dev/null', '-w', '%{http_code}',
+          '--max-time', '10',
+          '-u', `${WEBDAV_USER}:${WEBDAV_PASS}`,
+          '-X', 'PROPFIND',
+          '-H', 'Depth: 0',
+          `${url}/`,
+        ], { timeout: 15000 })
+
+        let stdout = ''
+        let stderr = ''
+        child.stdout.on('data', d => { stdout += d })
+        child.stderr.on('data', d => { stderr += d })
+        child.on('error', reject)
+        child.on('close', code => resolve({ code, stdout: stdout.trim(), stderr }))
+      })
+
+      const httpCode = parseInt(result.stdout, 10)
+      // 2xx 和 207 (Multi-Status) 都表示成功
+      const success = httpCode >= 200 && httpCode < 400
+
+      if (success) {
+        return { success: true, message: `连接成功（HTTP ${httpCode}）`, httpCode }
+      } else {
+        return { success: false, message: `连接失败（HTTP ${httpCode}）`, httpCode }
+      }
+    } catch (err) {
+      fastify.log.error({ err }, 'WebDAV 连接测试执行失败')
+      return { success: false, message: `连接测试失败: ${err.message}` }
     }
   })
 }
