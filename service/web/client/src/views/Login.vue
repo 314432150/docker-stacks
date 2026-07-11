@@ -147,13 +147,14 @@ async function doSubmit() {
         首次使用，请创建管理员账户
       </n-alert>
       <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
-      <n-form>
+      <n-form @submit.prevent="doSubmit">
         <n-form-item label="用户名" :feedback="userError" :validation-status="userError ? 'error' : undefined">
           <n-input
             v-model:value="user"
             placeholder="请输入用户名"
             :disabled="loading"
             clearable
+            :input-props="{ name: 'username', autocomplete: 'username' }"
             @keydown.enter="doSubmit"
           >
             <template #prefix><n-icon :component="PersonOutline" /></template>
@@ -166,6 +167,7 @@ async function doSubmit() {
             show-password-on="click"
             placeholder="请输入密码"
             :disabled="loading"
+            :input-props="{ name: 'password', autocomplete: 'current-password' }"
             @keydown.enter="doSubmit"
           >
             <template #prefix><n-icon :component="LockClosedOutline" /></template>
@@ -177,7 +179,7 @@ async function doSubmit() {
           </n-checkbox>
         </n-form-item>
         <n-form-item>
-          <n-button type="primary" block :loading="loading" attr-type="button" @click="doSubmit">
+          <n-button type="primary" block :loading="loading" attr-type="submit" @click="doSubmit">
             {{ buttonText }}
           </n-button>
         </n-form-item>
