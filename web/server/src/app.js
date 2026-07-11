@@ -2,6 +2,7 @@
 // 注册路由、静态文件托管、启动服务
 
 import Fastify from 'fastify'
+import fastifyStatic from '@fastify/static'
 import { PORT, HOST, STATIC_DIR } from './config.js'
 import { addAuthHook } from './plugins/auth.js'
 import appsRoutes from './routes/apps.js'
@@ -26,16 +27,21 @@ export async function buildApp(opts = {}) {
     const { stat } = await import('node:fs/promises')
     const st = await stat(STATIC_DIR)
     if (st.isDirectory()) {
-      // 尝试读取 index.html 确认有构建产物
       await import('node:fs/promises').then(fs =>
         fs.stat(`${STATIC_DIR}/index.html`)
       )
-      // 静态文件路由放在最后（避免覆盖 API）
-      fastify.get('/', (_req, reply) => {
-        return reply.sendFile('index.html')
+      await fastify.register(fastifyStatic, {
+        root: STATIC_DIR,
+        prefix: '/',
+        index: false,
+        wildcard: false,
       })
-      fastify.get('/assets/*', (req, reply) => {
-        return reply.sendFile(req.url.slice(1))
+      // SPA 回退：非 API 路径返回 index.html
+      fastify.setNotFoundHandler((req, reply) => {
+        if (req.url.startsWith('/api/')) {
+          return reply.code(404).send({ error: true, code: 'NOT_FOUND', message: '接口不存在' })
+        }
+        return reply.sendFile('index.html', STATIC_DIR)
       })
       fastify.log.info(`静态文件目录: ${STATIC_DIR}`)
     }

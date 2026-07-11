@@ -129,8 +129,15 @@ describe('引擎桥接层 (engine.js)', () => {
 
 describe('REST API 路由', () => {
   let app
+  let savedUser, savedPass
 
   before(async () => {
+    // 清空认证凭据，避免 global.env 中的凭据影响测试
+    savedUser = process.env.WEB_USER
+    savedPass = process.env.WEB_PASS
+    delete process.env.WEB_USER
+    delete process.env.WEB_PASS
+
     app = await buildApp({ logger: false })
     await app.ready()
   })
@@ -141,6 +148,9 @@ describe('REST API 路由', () => {
       cleanupTask(id)
     }
     await app.close()
+    // 恢复认证凭据
+    process.env.WEB_USER = savedUser
+    process.env.WEB_PASS = savedPass
   })
 
   // ── GET /api/apps ──

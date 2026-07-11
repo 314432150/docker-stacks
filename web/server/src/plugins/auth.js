@@ -13,6 +13,8 @@ import { timingSafeEqual } from 'node:crypto'
 const SKIP_PREFIXES = ['/api/events']
 
 function isExempt(url) {
+  // 非 API 路径（静态文件）无需认证
+  if (!url.startsWith('/api/')) return true
   return SKIP_PREFIXES.some(p => url.startsWith(p))
 }
 
