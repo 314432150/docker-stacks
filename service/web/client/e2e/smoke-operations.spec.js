@@ -196,13 +196,17 @@ test.describe('设置页 (Settings)', () => {
   test('密码字段类型为 password', async ({ page }) => {
     await page.goto('/#/settings')
     await page.waitForSelector('text=WebDAV 远程备份', { timeout: 5000 })
-    const passInput = page.locator('input[type="password"]')
+    // WebDAV 密码输入框在第一个 card 中
+    const passInput = page.locator('.n-card').first().locator('input[type="password"]')
     await expect(passInput).toBeVisible({ timeout: 3000 })
   })
 
   test('不填写直接点保存不报错', async ({ page }) => {
-    await page.route('/api/settings/webdav', async (route) => {
-      if (route.request().method() === 'PUT') {
+    // mock 测试连接成功 + 保存成功
+    await page.route('**/api/settings/webdav/**', async (route) => {
+      if (route.request().url().includes('/test')) {
+        await route.fulfill({ status: 200, body: JSON.stringify({ success: true, message: '连接成功' }) })
+      } else if (route.request().method() === 'PUT') {
         await route.fulfill({ status: 200, body: JSON.stringify({ configured: true }) })
       } else {
         await route.continue()
@@ -212,7 +216,8 @@ test.describe('设置页 (Settings)', () => {
     await page.goto('/#/settings')
     await page.waitForSelector('text=WebDAV 远程备份', { timeout: 5000 })
 
-    const passInput = page.locator('input[type="password"]')
+    // WebDAV 密码输入框在第一个 card 中
+    const passInput = page.locator('.n-card').first().locator('input[type="password"]')
     if (await passInput.isVisible()) {
       await passInput.fill('test-password')
     }

@@ -18,11 +18,11 @@ test.describe('概览页 (Dashboard)', () => {
 
   test('导航栏五个 Tab 都存在', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByRole('link', { name: '概览' })).toBeVisible()
-    await expect(page.getByRole('link', { name: '备份' })).toBeVisible()
-    await expect(page.getByRole('link', { name: '还原' })).toBeVisible()
-    await expect(page.getByRole('link', { name: '部署' })).toBeVisible()
-    await expect(page.getByRole('link', { name: '设置' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: '概览' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: '备份' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: '还原' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: '部署' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: '设置' })).toBeVisible()
   })
 
   test('显示权限标签', async ({ page }) => {
@@ -90,19 +90,19 @@ test.describe('路由导航', () => {
     await page.goto('/')
     await page.waitForSelector('h2')
 
-    await page.getByRole('link', { name: '备份' }).click()
+    await page.getByRole('menuitem', { name: '备份' }).click()
     await page.waitForURL(/#\/backup/)
     await expect(page.locator('h2')).toContainText('备份')
 
-    await page.getByRole('link', { name: '还原' }).click()
+    await page.getByRole('menuitem', { name: '还原' }).click()
     await page.waitForURL(/#\/restore/)
     await expect(page.locator('h2')).toContainText('还原')
 
-    await page.getByRole('link', { name: '部署' }).click()
+    await page.getByRole('menuitem', { name: '部署' }).click()
     await page.waitForURL(/#\/deploy/)
     await expect(page.locator('h2')).toContainText('部署')
 
-    await page.getByRole('link', { name: '设置' }).click()
+    await page.getByRole('menuitem', { name: '设置' }).click()
     await page.waitForURL(/#\/settings/)
     await expect(page.locator('h2')).toContainText('设置')
   })
@@ -200,7 +200,7 @@ test.describe('边界情况', () => {
 
     const tabs = ['备份', '还原', '部署', '设置', '概览']
     for (const tab of tabs) {
-      await page.getByRole('link', { name: tab }).click()
+      await page.getByRole('menuitem', { name: tab }).click()
       await page.waitForSelector('h2', { timeout: 5000 })
       const content = await page.locator('h2').textContent()
       expect(content).toBeTruthy()

@@ -8,6 +8,7 @@ import Restore from './views/Restore.vue'
 import Deploy from './views/Deploy.vue'
 import Settings from './views/Settings.vue'
 import Login from './views/Login.vue'
+import { authStore, checkAuth } from './composables/useAuth.js'
 
 const routes = [
   { path: '/login', component: Login, meta: { guest: true } },
@@ -23,40 +24,39 @@ const router = createRouter({
   routes,
 })
 
-// ── 全局认证守卫：未登录 → 跳转登录页；未初始化 → 初始化页 ──
-let authChecked = false
-let isAuthenticated = false
-let setupNeeded = false
-
+// ── 同步路由守卫（鉴权已预初始化，仅读 authStore）──
 router.beforeEach(async (to) => {
-  // 登录页免检（含初始化模式）
-  if (to.meta.guest) return true
-
-  // 首次导航时检查认证状态
-  if (!authChecked) {
-    try {
-      const res = await fetch('/api/auth/status')
-      const data = await res.json()
-      isAuthenticated = data.authenticated
-      setupNeeded = data.needsSetup || false
-    } catch {
-      isAuthenticated = false
-      setupNeeded = false
+  if (to.meta.guest) {
+    // 进入登录/初始化页：标记为未检查，让 Login.vue 主动重检
+    // （仅在用户从已登录态登出时需要刷新状态，普通进入 /login 不必重检）
+    if (authStore.isAuthenticated) {
+      authStore.checked = false
     }
-    authChecked = true
+    return true
   }
 
-  if (setupNeeded) {
+  // 离开登录页：异步重检一次（鉴权状态可能已变化）
+  if (!authStore.checked) {
+    await checkAuth()
+  }
+
+  if (authStore.setupNeeded) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 
-  if (!isAuthenticated) {
+  if (!authStore.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
   return true
 })
 
-const app = createApp(App)
-app.use(naive)
-app.use(router)
-app.mount('#app')
+// ── 启动：预初始化鉴权 → 创建 app → 挂载 ──
+;(async () => {
+  await checkAuth()
+
+  const app = createApp(App)
+  app.use(naive)
+  app.use(router)
+  await router.isReady()
+  app.mount('#app')
+})()

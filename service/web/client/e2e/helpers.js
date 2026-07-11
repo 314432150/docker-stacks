@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // E2E 共享认证辅助：通过后端 API 登录，获取 session cookie
 // ═══════════════════════════════════════════════════════════════
-const API_URL = 'http://127.0.0.1:3001'
+const API_URL = 'http://localhost:3001'
 
 export async function loginViaApi(request) {
   const res = await request.post(`${API_URL}/api/auth/login`, {

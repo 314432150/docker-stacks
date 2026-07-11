@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onActivated } from 'vue'
+import { ref, computed, onActivated } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NText, NCheckbox, NButton, NSpace, NAlert, NDivider,
@@ -51,7 +51,6 @@ async function loadApps() {
     pageLoading.value = false
   }
 }
-onMounted(loadApps)
 onActivated(loadApps)
 
 async function doDeploy() {

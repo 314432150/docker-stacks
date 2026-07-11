@@ -135,8 +135,15 @@ export async function saveWebdavSettings({ url, user, pass }) {
   return await res.json()
 }
 
-export async function testWebdavConnection() {
-  const res = await fetchWithError('/api/settings/webdav/test', { method: 'POST' })
+export async function testWebdavConnection({ url, user, pass } = {}) {
+  const body = {}
+  if (url) body.url = url
+  if (user) body.user = user
+  if (pass) body.pass = pass
+  const res = await fetchWithError('/api/settings/webdav/test', {
+    method: 'POST',
+    ...(Object.keys(body).length > 0 ? { body } : {}),
+  })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.message || `WebDAV 连接测试失败 (${res.status})`)

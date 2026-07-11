@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onActivated } from 'vue'
+import { ref, computed, watch, onActivated } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NText, NCheckbox, NSwitch, NInputNumber,
@@ -56,7 +56,6 @@ async function loadApps() {
     pageLoading.value = false
   }
 }
-onMounted(loadApps)
 onActivated(loadApps)
 
 // ── 选中 app 时自动勾选该 app 的推荐目录；取消时清除 ──

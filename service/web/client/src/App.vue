@@ -1,20 +1,23 @@
 <script setup>
-import { h, ref, onMounted, onUnmounted, computed, watchEffect, KeepAlive } from 'vue'
-import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed, watchEffect, KeepAlive } from 'vue'
+import { RouterView, useRouter, useRoute } from 'vue-router'
 import {
   NLayout, NLayoutHeader, NLayoutContent, NMenu, NText, NSpace,
-  NConfigProvider, NButton, NIcon, darkTheme, NMessageProvider,
+  NConfigProvider, NButton, NIcon, darkTheme, NMessageProvider, NDialogProvider,
 } from 'naive-ui'
 import { CubeOutline, SunnyOutline, MoonOutline, LogOutOutline } from '@vicons/ionicons5'
+import { authStore } from './composables/useAuth.js'
 
 const router = useRouter()
 const route = useRoute()
 
 const THEME_KEY = 'ds-web-theme'
 
-// ── 认证状态 ──
-const currentUser = ref('')
+// ── 认证状态（来自 router guard，避免重复请求 /api/auth/status）──
 const isLoginPage = computed(() => route.path === '/login')
+
+// ── 菜单当前激活项（跟随当前路由）──
+const activeMenuKey = computed(() => route.path)
 
 // ── 主题状态：null=跟随系统, 'light'=明亮, 'dark'=暗黑 ──
 const userPreference = ref(localStorage.getItem(THEME_KEY) || null)
@@ -55,8 +58,6 @@ let mediaQuery
 let onSystemChange
 
 onMounted(() => {
-  // 检查认证状态
-  checkAuth()
   // 监听系统主题变化
   mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   onSystemChange = () => {
@@ -67,27 +68,15 @@ onMounted(() => {
   mediaQuery.addEventListener('change', onSystemChange)
 })
 
-async function checkAuth() {
-  try {
-    const res = await fetch('/api/auth/status')
-    const data = await res.json()
-    if (data.authenticated) {
-      currentUser.value = data.user || ''
-    } else {
-      currentUser.value = ''
-    }
-  } catch {
-    currentUser.value = ''
-  }
-}
-
+// ── 登出 ──
 async function logout() {
   try {
     await fetch('/api/auth/logout', { method: 'POST' })
   } catch { /* ignore */ }
-  currentUser.value = ''
+  authStore.currentUser = ''
+  authStore.isAuthenticated = false
+  authStore.checked = false
   router.push('/login')
-  // 使用 window.$message 或直接跳过（登录页不需要 toast）
 }
 
 onUnmounted(() => {
@@ -101,18 +90,26 @@ watchEffect(() => {
   document.documentElement.classList.toggle('dark', isDark.value)
 })
 
+/** 菜单点击处理：编程式导航，避免 RouterLink + NMenu 的重复导航问题 */
+function handleMenuUpdate(key) {
+  if (key !== route.path) {
+    router.push(key)
+  }
+}
+
 const menuItems = [
-  { label: () => h(RouterLink, { to: '/' }, { default: () => '概览' }), key: '/' },
-  { label: () => h(RouterLink, { to: '/backup' }, { default: () => '备份' }), key: '/backup' },
-  { label: () => h(RouterLink, { to: '/restore' }, { default: () => '还原' }), key: '/restore' },
-  { label: () => h(RouterLink, { to: '/deploy' }, { default: () => '部署' }), key: '/deploy' },
-  { label: () => h(RouterLink, { to: '/settings' }, { default: () => '设置' }), key: '/settings' },
+  { label: '概览', key: '/' },
+  { label: '备份', key: '/backup' },
+  { label: '还原', key: '/restore' },
+  { label: '部署', key: '/deploy' },
+  { label: '设置', key: '/settings' },
 ]
 </script>
 
 <template>
   <n-config-provider :theme="isDark ? darkTheme : null">
     <n-message-provider>
+      <n-dialog-provider>
       <!-- 登录页：无导航栏 -->
       <n-layout v-if="isLoginPage" style="min-height: 100vh">
         <n-layout-content content-style="padding: 24px; max-width: 1200px; margin: 0 auto">
@@ -129,8 +126,8 @@ const menuItems = [
               <n-text strong style="font-size: 18px">docker-stacks</n-text>
             </n-space>
             <n-space align="center">
-              <n-menu mode="horizontal" :options="menuItems" :default-value="'/'" />
-              <n-text v-if="currentUser" depth="3" style="font-size:13px">{{ currentUser }}</n-text>
+              <n-menu mode="horizontal" :options="menuItems" :value="activeMenuKey" @update:value="handleMenuUpdate" />
+              <n-text v-if="authStore.currentUser" depth="3" style="font-size:13px">{{ authStore.currentUser }}</n-text>
               <n-button quaternary circle size="small" @click="toggleTheme" :title="themeLabel">
                 <template #icon>
                   <n-icon :component="isDark ? SunnyOutline : MoonOutline" />
@@ -152,6 +149,7 @@ const menuItems = [
           </RouterView>
         </n-layout-content>
       </n-layout>
+      </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>
 </template>

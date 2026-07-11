@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onActivated, h } from 'vue'
+import { ref, onActivated, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { NCard, NButton, NTag, NSpace, NGrid, NGi, NText, NAlert } from 'naive-ui'
 import { fetchApps, fetchContainerStatus } from '../composables/useApi.js'
@@ -48,8 +48,6 @@ function statusText(appName) {
   return s.state
 }
 
-onMounted(() => load())
-// KeepAlive 激活时静默刷新（缓存命中，瞬时返回）
 onActivated(() => load())
 
 function goBackup(app) {

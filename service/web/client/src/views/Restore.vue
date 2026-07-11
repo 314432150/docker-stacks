@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onActivated } from 'vue'
+import { ref, computed, watch, onActivated } from 'vue'
 import {
   NText, NCheckbox, NButton, NSpace, NAlert, NDivider,
   NCard, NGrid, NGi, NIcon, NEmpty, NPopconfirm,
@@ -76,7 +76,6 @@ async function loadData() {
     pageLoading.value = false
   }
 }
-onMounted(loadData)
 onActivated(loadData)
 
 // ── 格式化文件大小 ──

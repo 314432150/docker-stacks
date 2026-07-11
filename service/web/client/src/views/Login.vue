@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NForm, NFormItem, NInput, NButton, NCard, NCheckbox, NAlert } from 'naive-ui'
 import { PersonOutline, LockClosedOutline } from '@vicons/ionicons5'
+import { authStore } from '../composables/useAuth.js'
 
 const REMEMBER_KEY = 'ds-remember'
 
@@ -36,20 +37,18 @@ function restoreSavedCredentials() {
   } catch { /* ignore */ }
 }
 
-onMounted(async () => {
-  try {
-    const res = await fetch('/api/auth/status')
-    const data = await res.json()
-    if (data.needsSetup) {
-      isSetup.value = true
-      remember.value = true // 初始化默认保持登录
-      return
-    }
-    if (data.authenticated) {
-      router.replace(redirect)
-      return
-    }
-  } catch { /* ignore */ }
+onMounted(() => {
+  // 直接读 authStore（main.js 启动时已预初始化 checkAuth）
+  if (authStore.setupNeeded) {
+    isSetup.value = true
+    remember.value = true // 初始化默认保持登录
+    return
+  }
+
+  if (authStore.isAuthenticated) {
+    router.replace(redirect)
+    return
+  }
 
   isSetup.value = false
   restoreSavedCredentials()
@@ -112,6 +111,13 @@ async function doSubmit() {
     } else {
       localStorage.removeItem(REMEMBER_KEY)
     }
+
+    // 同步更新 authStore：setup/login 成功后立即视为已认证，避免被 beforeEach 拦截回 /login
+    authStore.checked = true
+    authStore.isAuthenticated = true
+    authStore.setupNeeded = false
+    authStore.currentUser = u
+    isSetup.value = false
 
     router.replace(redirect)
   } catch (e) {

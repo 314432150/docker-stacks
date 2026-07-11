@@ -2,8 +2,11 @@
 import { ref, onMounted } from 'vue'
 import {
   NText, NCard, NInput, NButton, NSpace, NAlert, NSpin, NDivider, NTag,
+  useDialog,
 } from 'naive-ui'
 import { fetchWebdavSettings, saveWebdavSettings, testWebdavConnection } from '../composables/useApi.js'
+
+const dialog = useDialog()
 
 // ── WebDAV ──
 const loading = ref(true)
@@ -11,7 +14,6 @@ const saving = ref(false)
 const testing = ref(false)
 const error = ref('')
 const success = ref('')
-const testResult = ref(null)
 const configured = ref(false)
 
 const url = ref('')
@@ -26,7 +28,7 @@ async function load() {
     configured.value = data.configured
     url.value = data.url || ''
     user.value = data.user || ''
-    pass.value = ''
+    pass.value = '' // 后端不返回明文密码
   } catch (e) {
     error.value = e.message
   } finally {
@@ -38,7 +40,57 @@ async function save() {
   saving.value = true
   error.value = ''
   success.value = ''
-  testResult.value = null
+
+  try {
+    // 1. 先测试连接
+    let testPassed = false
+    let testMsg = ''
+    try {
+      const result = await testWebdavConnection({
+        url: url.value.trim() || undefined,
+        user: user.value.trim() || undefined,
+        pass: pass.value.trim() || undefined,
+      })
+      testPassed = result.success
+      testMsg = result.message
+    } catch (e) {
+      testMsg = e.message || '连接测试异常'
+    }
+
+    // 2. 测试失败 → 弹出确认对话框
+    if (!testPassed) {
+      return new Promise((resolve) => {
+        dialog.warning({
+          title: '连接测试失败',
+          content: () => `${testMsg}\n\n配置不正确可能导致备份上传失败，确定要继续保存吗？`,
+          positiveText: '仍然保存',
+          negativeText: '取消',
+          onPositiveClick: async () => {
+            resolve(doSave())
+          },
+          onNegativeClick: () => {
+            error.value = testMsg
+            saving.value = false
+            resolve()
+          },
+          onClose: () => {
+            error.value = testMsg
+            saving.value = false
+            resolve()
+          },
+        })
+      })
+    }
+
+    // 3. 测试通过 → 直接保存
+    await doSave()
+  } finally {
+    // doSave 内部会设 saving = false，此处兜底
+  }
+}
+
+async function doSave() {
+  saving.value = true
   try {
     await saveWebdavSettings({
       url: url.value.trim(),
@@ -55,15 +107,32 @@ async function save() {
   }
 }
 
+/** 测试按钮是否可用：未配置时需要全部填写，已配置时只需 url 和 user */
+const canTest = () => {
+  const hasUrl = !!url.value.trim()
+  const hasUser = !!user.value.trim()
+  const hasPass = !!pass.value.trim()
+  if (configured.value) return hasUrl && hasUser // 已保存的密码可用于测试
+  return hasUrl && hasUser && hasPass // 未配置时必须填写全部字段
+}
+
 async function testConnection() {
   testing.value = true
   error.value = ''
   success.value = ''
-  testResult.value = null
   try {
-    testResult.value = await testWebdavConnection()
+    const result = await testWebdavConnection({
+      url: url.value.trim() || undefined,
+      user: user.value.trim() || undefined,
+      pass: pass.value.trim() || undefined,
+    })
+    if (result.success) {
+      success.value = result.message
+    } else {
+      error.value = result.message
+    }
   } catch (e) {
-    testResult.value = { success: false, message: e.message }
+    error.value = e.message
   } finally {
     testing.value = false
   }
@@ -130,11 +199,11 @@ onMounted(load)
   <div>
     <n-text tag="h2" style="margin: 0 0 20px 0">设置</n-text>
 
-    <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
-    <n-alert v-if="success" type="success" style="margin-bottom: 16px">{{ success }}</n-alert>
-    <n-alert v-if="testResult" :type="testResult.success ? 'success' : 'warning'" style="margin-bottom: 16px">
-      {{ testResult.message }}
-    </n-alert>
+    <!-- 消息占位容器：固定最小高度，避免消息出现/消失时页面跳动 -->
+    <div class="msg-slot">
+      <n-alert v-if="error" type="error">{{ error }}</n-alert>
+      <n-alert v-if="success" type="success">{{ success }}</n-alert>
+    </div>
 
     <!-- ── WebDAV 远程备份 ── -->
     <n-card title="WebDAV 远程备份" size="small" style="max-width: 600px">
@@ -174,7 +243,7 @@ onMounted(load)
             <n-button type="primary" :loading="saving" @click="save">
               保存
             </n-button>
-            <n-button :loading="testing" :disabled="!url || !user || !pass" @click="testConnection">
+            <n-button :loading="testing" :disabled="!canTest()" @click="testConnection">
               测试连接
             </n-button>
           </n-space>
@@ -225,3 +294,13 @@ onMounted(load)
     </n-card>
   </div>
 </template>
+
+<style scoped>
+.msg-slot {
+  min-height: 44px;
+  margin-bottom: 4px;
+}
+.msg-slot > * + * {
+  margin-top: 8px;
+}
+</style>

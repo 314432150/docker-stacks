@@ -55,7 +55,7 @@ export default async function settingsRoutes(fastify) {
   })
 
   // ── POST: 测试 WebDAV 连接 ──
-  fastify.post('/api/settings/webdav/test', async (_request, reply) => {
+  fastify.post('/api/settings/webdav/test', async (request, reply) => {
     let settings
     try {
       settings = getWebdavSettings()
@@ -66,7 +66,15 @@ export default async function settingsRoutes(fastify) {
       })
     }
 
-    const { url, user, pass } = settings
+    // 请求体参数优先级高于已存储配置（支持未保存前测试）
+    const bodyUrl = (request.body?.url || '').trim()
+    const bodyUser = (request.body?.user || '').trim()
+    const bodyPass = (request.body?.pass || '').trim()
+
+    const url = bodyUrl || settings.url || ''
+    const user = bodyUser || settings.user || ''
+    const pass = bodyPass || settings.pass || ''
+
     if (!url || !user || !pass) {
       return reply.code(400).send({
         error: true, code: 'NOT_CONFIGURED',
