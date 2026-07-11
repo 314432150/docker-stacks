@@ -23,12 +23,13 @@ const router = createRouter({
   routes,
 })
 
-// ── 全局认证守卫：未登录 → 跳转登录页 ──
+// ── 全局认证守卫：未登录 → 跳转登录页；未初始化 → 初始化页 ──
 let authChecked = false
 let isAuthenticated = false
+let setupNeeded = false
 
 router.beforeEach(async (to) => {
-  // 登录页免检
+  // 登录页免检（含初始化模式）
   if (to.meta.guest) return true
 
   // 首次导航时检查认证状态
@@ -37,10 +38,16 @@ router.beforeEach(async (to) => {
       const res = await fetch('/api/auth/status')
       const data = await res.json()
       isAuthenticated = data.authenticated
+      setupNeeded = data.needsSetup || false
     } catch {
       isAuthenticated = false
+      setupNeeded = false
     }
     authChecked = true
+  }
+
+  if (setupNeeded) {
+    return { path: '/login', query: { redirect: to.fullPath } }
   }
 
   if (!isAuthenticated) {

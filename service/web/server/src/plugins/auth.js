@@ -1,49 +1,60 @@
 // ── Session 认证钩子 ──
-// 当 WEB_USER / WEB_PASS 被设置时，校验所有 API 请求的会话凭据
-// 未设置凭据时，钩子无操作（向后兼容）
+// 凭据存储在 settings.json（webUser + webPassHash）
+// 首次运行时无凭据 → needsSetup 模式，setup 接口免认证
+// 已配置凭据 → 所有 /api/* 请求需有效 session
 
 import { timingSafeEqual } from 'node:crypto'
 import { getSession } from './session.js'
+import { getAuthCredentials, verifyPassword } from '../db/settings.js'
 
 const SKIP_PREFIXES = ['/api/events', '/api/auth/']
 
 function isExempt(url) {
-  // 静态文件免认证（SPA 需要先加载才能看到登录页）
   if (!url.startsWith('/api/')) return true
-  // API 认证例外：登录/登出/状态/SSE
   return SKIP_PREFIXES.some(p => url.startsWith(p))
 }
 
+/** 检查是否已配置管理员凭据 */
 export function isAuthEnabled() {
-  return !!(process.env.WEB_USER && process.env.WEB_PASS)
+  const { user, passHash } = getAuthCredentials()
+  return !!(user && passHash)
 }
 
-/** 校验用户名密码（定时攻击安全比较） */
-export function checkCredentials(candidateUser, candidatePass) {
-  const user = process.env.WEB_USER
-  const pass = process.env.WEB_PASS
-  if (!user || !pass) return { valid: false }
+/** 检查是否需要初始化（无凭据） */
+export function needsSetup() {
+  return !isAuthEnabled()
+}
+
+/**
+ * 校验用户名密码
+ * @returns {Promise<{ valid: boolean, reason?: string }>}
+ */
+export async function checkCredentials(candidateUser, candidatePass) {
+  const { user, passHash } = getAuthCredentials()
+  if (!user || !passHash) return { valid: false, reason: 'not_configured' }
   if (!candidateUser || !candidatePass) return { valid: false, reason: 'missing' }
 
   const expectedUser = Buffer.from(user)
   const givenUser = Buffer.from(candidateUser)
-  const expectedPass = Buffer.from(pass)
-  const givenPass = Buffer.from(candidatePass)
+  if (expectedUser.length !== givenUser.length || !timingSafeEqual(expectedUser, givenUser)) {
+    return { valid: false, reason: 'mismatch' }
+  }
 
-  if (expectedUser.length !== givenUser.length || expectedPass.length !== givenPass.length) {
-    return { valid: false, reason: 'mismatch' }
-  }
-  if (!timingSafeEqual(expectedUser, givenUser) || !timingSafeEqual(expectedPass, givenPass)) {
-    return { valid: false, reason: 'mismatch' }
-  }
+  const passOk = await verifyPassword(candidatePass, passHash)
+  if (!passOk) return { valid: false, reason: 'mismatch' }
   return { valid: true }
+}
+
+/** 获取当前存储的用户名（供 session 校验） */
+export function getStoredUser() {
+  return getAuthCredentials().user
 }
 
 export function addAuthHook(fastify) {
   if (isAuthEnabled()) {
-    fastify.log.info(`认证已启用（用户: ${process.env.WEB_USER}）`)
+    fastify.log.info(`认证已启用（用户: ${getAuthCredentials().user}）`)
   } else {
-    fastify.log.info('认证已禁用（未设置 WEB_USER / WEB_PASS）')
+    fastify.log.info('认证已禁用（等待初始化管理员账户）')
   }
 
   fastify.addHook('onRequest', async (request, reply) => {
@@ -51,7 +62,7 @@ export function addAuthHook(fastify) {
     if (isExempt(request.url)) return
 
     const session = getSession(request)
-    if (!session || session.user !== process.env.WEB_USER) {
+    if (!session || session.user !== getStoredUser()) {
       reply.code(401).send({
         error: true,
         code: 'UNAUTHORIZED',

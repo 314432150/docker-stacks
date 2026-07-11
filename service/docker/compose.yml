@@ -47,7 +47,7 @@ services:
         max-file: "3"
 
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:3001/api/apps"]
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:3001/api/auth/status"]
       interval: 30s
       timeout: 10s
       start_period: 15s

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NForm, NFormItem, NInput, NButton, NCard, NCheckbox, NAlert } from 'naive-ui'
 import { PersonOutline, LockClosedOutline } from '@vicons/ionicons5'
@@ -13,16 +13,19 @@ const pass = ref('')
 const remember = ref(false)
 const error = ref('')
 const loading = ref(false)
-
-// 逐字段校验错误信息
 const userError = ref('')
 const passError = ref('')
+const isSetup = ref(false)
 
-// 跳转目标（登录后回跳）
 const redirect = route.query.redirect || '/'
 
-/** 从 localStorage 恢复上次保持登录的凭据 */
+const cardTitle = computed(() => isSetup.value ? '初始化管理员账户' : '登录')
+const buttonText = computed(() => isSetup.value ? '创建管理员' : '登录')
+const endpoint = computed(() => isSetup.value ? '/api/auth/setup' : '/api/auth/login')
+
+/** 从 localStorage 恢复上次保存的凭据 */
 function restoreSavedCredentials() {
+  if (isSetup.value) return
   try {
     const raw = localStorage.getItem(REMEMBER_KEY)
     if (!raw) return
@@ -30,28 +33,31 @@ function restoreSavedCredentials() {
     if (saved.user) user.value = saved.user
     if (saved.pass) pass.value = saved.pass
     if (saved.remember) remember.value = true
-  } catch { /* ignore corrupted data */ }
+  } catch { /* ignore */ }
 }
 
 onMounted(async () => {
-  // 先检查是否已登录
   try {
     const res = await fetch('/api/auth/status')
     const data = await res.json()
+    if (data.needsSetup) {
+      isSetup.value = true
+      remember.value = true // 初始化默认保持登录
+      return
+    }
     if (data.authenticated) {
       router.replace(redirect)
       return
     }
   } catch { /* ignore */ }
 
-  // 未登录：恢复上次保持登录的凭据
+  isSetup.value = false
   restoreSavedCredentials()
 })
 
-/** 前端输入校验，通过返回 true，否则设置字段错误并返回 false */
+/** 前端输入校验 */
 function validateInput() {
   let valid = true
-
   userError.value = ''
   passError.value = ''
   error.value = ''
@@ -78,14 +84,14 @@ function validateInput() {
   return valid
 }
 
-async function doLogin() {
+async function doSubmit() {
   if (loading.value) return
   if (!validateInput()) return
 
   loading.value = true
   try {
     const u = (user.value || '').trim()
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(endpoint.value, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -96,11 +102,11 @@ async function doLogin() {
     })
     const data = await res.json()
     if (!data.ok) {
-      error.value = data.message || '登录失败'
+      error.value = data.message || '操作失败'
       return
     }
 
-    // 保持登录：保存凭据供下次自动填充
+    // 保持登录
     if (remember.value) {
       localStorage.setItem(REMEMBER_KEY, JSON.stringify({ user: u, pass: pass.value, remember: true }))
     } else {
@@ -118,7 +124,6 @@ async function doLogin() {
 
 <template>
   <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 60vh">
-    <!-- 应用标题 & 描述 -->
     <div style="text-align: center; margin-bottom: 48px">
       <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 600; color: var(--n-title-text-color, #333)">
         Docker Stacks
@@ -131,7 +136,10 @@ async function doLogin() {
       </p>
     </div>
 
-    <n-card title="登录" style="width: 360px; max-width: 90vw" size="small">
+    <n-card :title="cardTitle" style="width: 360px; max-width: 90vw" size="small">
+      <n-alert v-if="isSetup && !error" type="info" style="margin-bottom: 16px">
+        首次使用，请创建管理员账户
+      </n-alert>
       <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
       <n-form>
         <n-form-item label="用户名" :feedback="userError" :validation-status="userError ? 'error' : undefined">
@@ -140,7 +148,7 @@ async function doLogin() {
             placeholder="请输入用户名"
             :disabled="loading"
             clearable
-            @keydown.enter="doLogin"
+            @keydown.enter="doSubmit"
           >
             <template #prefix><n-icon :component="PersonOutline" /></template>
           </n-input>
@@ -152,7 +160,7 @@ async function doLogin() {
             show-password-on="click"
             placeholder="请输入密码"
             :disabled="loading"
-            @keydown.enter="doLogin"
+            @keydown.enter="doSubmit"
           >
             <template #prefix><n-icon :component="LockClosedOutline" /></template>
           </n-input>
@@ -163,13 +171,11 @@ async function doLogin() {
           </n-checkbox>
         </n-form-item>
         <n-form-item>
-          <n-button type="primary" block :loading="loading" attr-type="button" @click="doLogin">
-            登录
+          <n-button type="primary" block :loading="loading" attr-type="button" @click="doSubmit">
+            {{ buttonText }}
           </n-button>
         </n-form-item>
       </n-form>
     </n-card>
   </div>
 </template>
-
-

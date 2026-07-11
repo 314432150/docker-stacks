@@ -7,10 +7,12 @@ import assert from 'node:assert'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
+import { writeFileSync, unlinkSync, existsSync } from 'node:fs'
 
 import { executeEngine } from '../src/engine.js'
 import { buildApp } from '../src/app.js'
 import { tasks, cleanupTask } from '../src/tasks.js'
+import { SETTINGS_FILE } from '../src/db/settings.js'
 
 // 模拟引擎路径
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
@@ -129,28 +131,24 @@ describe('引擎桥接层 (engine.js)', () => {
 
 describe('REST API 路由', () => {
   let app
-  let savedUser, savedPass
+  let settingsBackup
 
   before(async () => {
-    // 清空认证凭据，避免 global.env 中的凭据影响测试
-    savedUser = process.env.WEB_USER
-    savedPass = process.env.WEB_PASS
+    // 确保无环境变量凭据
     delete process.env.WEB_USER
     delete process.env.WEB_PASS
 
+    settingsBackup = backupSettings()
     app = await buildApp({ logger: false })
     await app.ready()
   })
 
   after(async () => {
-    // 清理所有残留任务
+    restoreSettings(settingsBackup)
     for (const [id] of tasks) {
       cleanupTask(id)
     }
     await app.close()
-    // 恢复认证凭据
-    process.env.WEB_USER = savedUser
-    process.env.WEB_PASS = savedPass
   })
 
   // ── GET /api/apps ──
@@ -322,20 +320,136 @@ describe('REST API 路由', () => {
   })
 })
 
-describe('认证插件 (auth)', () => {
-  let appAuth
+// ── 辅助: 备份/恢复 settings.json（测试中操作凭据存储） ──
+function backupSettings() {
+  if (existsSync(SETTINGS_FILE)) {
+    return { backup: true, content: execSync(`cat ${SETTINGS_FILE}`).toString() }
+  }
+  return { backup: false }
+}
+function restoreSettings(bk) {
+  if (bk.backup) {
+    writeFileSync(SETTINGS_FILE, bk.content, 'utf-8')
+  } else {
+    try { unlinkSync(SETTINGS_FILE) } catch {}
+  }
+}
+
+describe('密码工具 (crypto)', () => {
+  let hashPassword, verifyPassword
 
   before(async () => {
-    process.env.WEB_USER = 'admin'
-    process.env.WEB_PASS = 'test123'
+    const mod = await import('../src/db/settings.js')
+    hashPassword = mod.hashPassword
+    verifyPassword = mod.verifyPassword
+  })
+
+  it('hashPassword 返回字符串', async () => {
+    const h = await hashPassword('test123')
+    assert.strictEqual(typeof h, 'string')
+    assert.ok(h.length > 0)
+    assert.ok(!h.includes('test123'), '哈希不应包含明文密码')
+  })
+
+  it('verifyPassword 正确密码 → true', async () => {
+    const h = await hashPassword('mypass')
+    assert.ok(await verifyPassword('mypass', h))
+  })
+
+  it('verifyPassword 错误密码 → false', async () => {
+    const h = await hashPassword('correct')
+    assert.ok(!await verifyPassword('wrong', h))
+  })
+
+  it('相同密码两次 hash 结果不同（随机盐）', async () => {
+    const h1 = await hashPassword('same')
+    const h2 = await hashPassword('same')
+    assert.notStrictEqual(h1, h2)
+    // 但都能验证通过
+    assert.ok(await verifyPassword('same', h1))
+    assert.ok(await verifyPassword('same', h2))
+  })
+
+  it('verifyPassword 空密码 → false', async () => {
+    const h = await hashPassword('valid')
+    assert.ok(!await verifyPassword('', h))
+    assert.ok(!await verifyPassword(null, h))
+  })
+})
+
+describe('认证凭据存储 (settings auth)', () => {
+  let getAuthCredentials, setAuthCredentials
+  let settingsBackup
+
+  before(async () => {
+    const mod = await import('../src/db/settings.js')
+    getAuthCredentials = mod.getAuthCredentials
+    setAuthCredentials = mod.setAuthCredentials
+    settingsBackup = backupSettings()
+  })
+
+  after(() => {
+    restoreSettings(settingsBackup)
+  })
+
+  it('无凭据时 getAuthCredentials 返回 null', () => {
+    // 确保 settings.json 中没有 auth 凭据
+    const creds = getAuthCredentials()
+    assert.strictEqual(creds.user, null)
+    assert.strictEqual(creds.passHash, null)
+  })
+
+  it('setAuthCredentials 写入后 getAuthCredentials 可读取', async () => {
+    await setAuthCredentials('admin', 'admin123')
+    const creds = getAuthCredentials()
+    assert.strictEqual(creds.user, 'admin')
+    assert.ok(creds.passHash)
+  })
+
+  it('setAuthCredentials 覆盖后 getAuthCredentials 返回新值', async () => {
+    await setAuthCredentials('root', 'root456')
+    const creds = getAuthCredentials()
+    assert.strictEqual(creds.user, 'root')
+    assert.ok(creds.passHash)
+  })
+
+  it('setAuthCredentials 拒绝对空用户名写入', async () => {
+    await assert.rejects(
+      () => setAuthCredentials('', 'anything'),
+      /用户名不能为空/,
+    )
+  })
+
+  it('setAuthCredentials 拒绝对空密码写入', async () => {
+    await assert.rejects(
+      () => setAuthCredentials('user', ''),
+      /密码不能为空/,
+    )
+  })
+})
+
+describe('认证插件 (auth)', () => {
+  let appAuth, appNoAuth
+  let settingsBackup
+
+  before(async () => {
+    // 根测试块已确保无 WEB_USER/WEB_PASS，这里额外确保
+    delete process.env.WEB_USER
+    delete process.env.WEB_PASS
+
+    settingsBackup = backupSettings()
+
+    const mod = await import('../src/db/settings.js')
+    // 先创建凭据，再构建 app（auth hook 在构建时初始化）
+    await mod.setAuthCredentials('admin', 'test123')
     appAuth = await buildApp({ logger: false })
     await appAuth.ready()
   })
 
   after(async () => {
-    delete process.env.WEB_USER
-    delete process.env.WEB_PASS
-    await appAuth.close()
+    restoreSettings(settingsBackup)
+    await appAuth?.close()
+    await appNoAuth?.close()
   })
 
   /** 模拟登录获取 session cookie */
@@ -416,7 +530,6 @@ describe('认证插件 (auth)', () => {
     assert.ok(res.json().ok)
     const cookie = res.cookies.find(c => c.name === 'ds-sid')
     assert.ok(cookie)
-    // remember=true 时 maxAge 应为 7 天 = 604800 秒
     assert.strictEqual(cookie.maxAge, 7 * 24 * 60 * 60)
   })
 
@@ -433,19 +546,17 @@ describe('认证插件 (auth)', () => {
       url: '/api/apps',
       cookies: { 'ds-sid': cookie.value },
     })
-    if (res.statusCode === 500) return  // 引擎不可用时跳过
+    if (res.statusCode === 500) return
     assert.notStrictEqual(res.statusCode, 401)
   })
 
   it('登出后 → 401', async () => {
     const cookie = await login()
-    // 先登出
     await appAuth.inject({
       method: 'POST',
       url: '/api/auth/logout',
       cookies: { 'ds-sid': cookie.value },
     })
-    // 登出后访问 API
     const res = await appAuth.inject({
       method: 'GET',
       url: '/api/apps',
@@ -462,6 +573,263 @@ describe('认证插件 (auth)', () => {
   it('登录端点免认证', async () => {
     const res = await appAuth.inject({ method: 'GET', url: '/api/auth/status' })
     assert.strictEqual(res.statusCode, 200)
+  })
+
+  it('GET /api/auth/status 返回 needsSetup=false（已配置凭据）', async () => {
+    const res = await appAuth.inject({ method: 'GET', url: '/api/auth/status' })
+    assert.strictEqual(res.statusCode, 200)
+    assert.strictEqual(res.json().authEnabled, true)
+    assert.strictEqual(res.json().needsSetup, false)
+  })
+
+  it('GET /api/auth/status 未登录时 authenticated=false', async () => {
+    // 用无 cookie 的请求验证
+    const res = await appAuth.inject({ method: 'GET', url: '/api/auth/status' })
+    assert.strictEqual(res.json().authenticated, false)
+  })
+
+  it('GET /api/auth/status 已登录时 authenticated=true', async () => {
+    const cookie = await login()
+    const res = await appAuth.inject({
+      method: 'GET',
+      url: '/api/auth/status',
+      cookies: { 'ds-sid': cookie.value },
+    })
+    assert.strictEqual(res.json().authenticated, true)
+    assert.strictEqual(res.json().user, 'admin')
+  })
+})
+
+describe('认证设置流程 (setup + credentials)', () => {
+  let settingsBackup
+
+  before(() => {
+    delete process.env.WEB_USER
+    delete process.env.WEB_PASS
+    settingsBackup = backupSettings()
+    try { unlinkSync(SETTINGS_FILE) } catch {}
+  })
+
+  after(() => {
+    restoreSettings(settingsBackup)
+  })
+
+  // 辅助：创建无凭据的临时 app
+  async function tempAppNoCreds() {
+    try { unlinkSync(SETTINGS_FILE) } catch {}
+    const app = await buildApp({ logger: false })
+    await app.ready()
+    return app
+  }
+
+  // ── setup 端点 ──
+
+  it('POST /api/auth/setup 正确输入 → 201', async () => {
+    const app = await tempAppNoCreds()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/setup',
+      payload: { user: 'admin', pass: 'setup123' },
+    })
+    assert.strictEqual(res.statusCode, 201)
+    assert.strictEqual(res.json().ok, true)
+    const cookie = res.cookies?.find(c => c.name === 'ds-sid')
+    assert.ok(cookie, '初始化后应自动签发 session')
+    await app.close()
+  })
+
+  it('POST /api/auth/setup 重复设置 → 409（凭据已存在）', async () => {
+    // 依赖上一个测试已写入凭据
+    const app = await buildApp({ logger: false })
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/setup',
+      payload: { user: 'hacker', pass: 'hack123' },
+    })
+    assert.strictEqual(res.statusCode, 409)
+    assert.strictEqual(res.json().code, 'ALREADY_SETUP')
+    await app.close()
+  })
+
+  it('POST /api/auth/setup 空用户名 → 400', async () => {
+    const app = await tempAppNoCreds()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/setup',
+      payload: { user: '', pass: 'okpass' },
+    })
+    assert.strictEqual(res.statusCode, 400)
+    assert.strictEqual(res.json().code, 'INVALID_INPUT')
+    await app.close()
+  })
+
+  it('GET /api/auth/status 未配置时 needsSetup=true', async () => {
+    const app = await tempAppNoCreds()
+    const res = await app.inject({ method: 'GET', url: '/api/auth/status' })
+    assert.strictEqual(res.json().needsSetup, true)
+    assert.strictEqual(res.json().authEnabled, false)
+    assert.strictEqual(res.json().authenticated, false)
+    await app.close()
+  })
+
+  it('GET /api/auth/status 已配置时 needsSetup=false', async () => {
+    const { setAuthCredentials } = await import('../src/db/settings.js')
+    await setAuthCredentials('admin', 'test123')
+    const app = await buildApp({ logger: false })
+    await app.ready()
+    const res = await app.inject({ method: 'GET', url: '/api/auth/status' })
+    assert.strictEqual(res.json().needsSetup, false)
+    assert.strictEqual(res.json().authEnabled, true)
+    await app.close()
+  })
+
+  // ── credentials 端点 ──
+
+  it('PUT /api/auth/credentials 正确旧密码 → 200，新密码可登录', async () => {
+    const { setAuthCredentials } = await import('../src/db/settings.js')
+    await setAuthCredentials('admin', 'oldpassword')
+
+    const app = await buildApp({ logger: false })
+    await app.ready()
+
+    // 登录
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'admin', pass: 'oldpassword' },
+    })
+    assert.strictEqual(loginRes.statusCode, 200)
+    const cookie = loginRes.cookies?.find(c => c.name === 'ds-sid')
+    assert.ok(cookie)
+
+    // 修改密码
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/auth/credentials',
+      cookies: { 'ds-sid': cookie.value },
+      payload: { oldPass: 'oldpassword', newUser: 'admin', newPass: 'newpass456' },
+    })
+    assert.strictEqual(res.statusCode, 200)
+    assert.strictEqual(res.json().ok, true)
+
+    // 新密码可登录
+    const newLogin = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'admin', pass: 'newpass456' },
+    })
+    assert.strictEqual(newLogin.statusCode, 200)
+    assert.strictEqual(newLogin.json().ok, true)
+
+    // 旧密码不可登录
+    const oldLogin = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'admin', pass: 'oldpassword' },
+    })
+    assert.strictEqual(oldLogin.statusCode, 401)
+
+    await app.close()
+  })
+
+  it('PUT /api/auth/credentials 错误旧密码 → 401', async () => {
+    const { setAuthCredentials } = await import('../src/db/settings.js')
+    await setAuthCredentials('admin', 'test123')
+
+    const app = await buildApp({ logger: false })
+    await app.ready()
+
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'admin', pass: 'test123' },
+    })
+    const cookie = loginRes.cookies?.find(c => c.name === 'ds-sid')
+    assert.ok(cookie)
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/auth/credentials',
+      cookies: { 'ds-sid': cookie.value },
+      payload: { oldPass: 'wrongpass', newUser: 'admin', newPass: 'newpass' },
+    })
+    assert.strictEqual(res.statusCode, 401)
+    assert.strictEqual(res.json().code, 'AUTH_FAILED')
+
+    await app.close()
+  })
+
+  it('PUT /api/auth/credentials 无会话 → 401', async () => {
+    const { setAuthCredentials } = await import('../src/db/settings.js')
+    await setAuthCredentials('admin', 'test123')
+
+    const app = await buildApp({ logger: false })
+    await app.ready()
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/auth/credentials',
+      payload: { oldPass: 'test123', newUser: 'admin', newPass: 'newpass' },
+    })
+    assert.strictEqual(res.statusCode, 401)
+
+    await app.close()
+  })
+
+  it('PUT /api/auth/credentials 空新密码 → 400', async () => {
+    const { setAuthCredentials } = await import('../src/db/settings.js')
+    await setAuthCredentials('admin', 'test123')
+
+    const app = await buildApp({ logger: false })
+    await app.ready()
+
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'admin', pass: 'test123' },
+    })
+    const cookie = loginRes.cookies?.find(c => c.name === 'ds-sid')
+    assert.ok(cookie)
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/auth/credentials',
+      cookies: { 'ds-sid': cookie.value },
+      payload: { oldPass: 'test123', newUser: 'admin', newPass: '' },
+    })
+    assert.strictEqual(res.statusCode, 400)
+
+    await app.close()
+  })
+
+  it('PUT /api/auth/credentials 可只改密码不改用户名', async () => {
+    const { setAuthCredentials, getAuthCredentials } = await import('../src/db/settings.js')
+    await setAuthCredentials('sameuser', 'oldpassword')
+
+    const app = await buildApp({ logger: false })
+    await app.ready()
+
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'sameuser', pass: 'oldpassword' },
+    })
+    const cookie = loginRes.cookies?.find(c => c.name === 'ds-sid')
+    assert.ok(cookie)
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/auth/credentials',
+      cookies: { 'ds-sid': cookie.value },
+      payload: { oldPass: 'oldpassword', newPass: 'brandnew' },
+    })
+    assert.strictEqual(res.statusCode, 200)
+
+    const credsAfter = getAuthCredentials()
+    assert.strictEqual(credsAfter.user, 'sameuser')
+
+    await app.close()
   })
 })
 
