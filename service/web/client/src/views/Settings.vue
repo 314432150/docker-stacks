@@ -221,12 +221,20 @@ onMounted(load)
 
           <n-space vertical>
             <n-text>WebDAV 地址</n-text>
-            <n-input v-model:value="url" placeholder="https://dav.jianguoyun.com/dav/docker-stacks" />
+            <n-input
+              v-model:value="url"
+              placeholder="https://dav.jianguoyun.com/dav/docker-stacks"
+              :input-props="{ name: 'webdav-url', autocomplete: 'off' }"
+            />
           </n-space>
 
           <n-space vertical>
             <n-text>用户名</n-text>
-            <n-input v-model:value="user" placeholder="WebDAV 账号" />
+            <n-input
+              v-model:value="user"
+              placeholder="WebDAV 账号"
+              :input-props="{ name: 'webdav-user', autocomplete: 'off' }"
+            />
           </n-space>
 
           <n-space vertical>
@@ -236,6 +244,7 @@ onMounted(load)
               type="password"
               :placeholder="configured ? '留空则不修改密码' : 'WebDAV 密码'"
               show-password-on="click"
+              :input-props="{ name: 'webdav-pass', autocomplete: 'new-password' }"
             />
           </n-space>
 
@@ -272,6 +281,7 @@ onMounted(load)
               placeholder="输入当前密码"
               show-password-on="click"
               :disabled="changingPwd"
+              :input-props="{ name: 'old-password', autocomplete: 'current-password' }"
             />
           </n-space>
 
@@ -283,6 +293,7 @@ onMounted(load)
               placeholder="输入新密码"
               show-password-on="click"
               :disabled="changingPwd"
+              :input-props="{ name: 'new-password', autocomplete: 'new-password' }"
             />
           </n-space>
 
