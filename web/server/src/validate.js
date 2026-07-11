@@ -85,3 +85,25 @@ export function validateArchive(archive) {
   }
   return null
 }
+
+/**
+ * 校验登录输入
+ * @param {*} user
+ * @param {*} pass
+ * @returns {{ valid: boolean, message?: string }}
+ */
+export function validateLoginInput(user, pass) {
+  if (!user || typeof user !== 'string' || !user.trim()) {
+    return { valid: false, message: '请输入用户名' }
+  }
+  if (user.trim().length > 128) {
+    return { valid: false, message: '用户名长度不能超过 128 个字符' }
+  }
+  if (!pass || typeof pass !== 'string') {
+    return { valid: false, message: '请输入密码' }
+  }
+  if (pass.length > 128) {
+    return { valid: false, message: '密码长度不能超过 128 个字符' }
+  }
+  return { valid: true }
+}

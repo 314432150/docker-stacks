@@ -338,36 +338,130 @@ describe('认证插件 (auth)', () => {
     await appAuth.close()
   })
 
-  it('无 Authorization 头 → 401', async () => {
+  /** 模拟登录获取 session cookie */
+  async function login() {
+    const res = await appAuth.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'admin', pass: 'test123' },
+    })
+    assert.strictEqual(res.statusCode, 200)
+    assert.ok(res.json().ok)
+    return res.cookies.find(c => c.name === 'ds-sid')
+  }
+
+  it('无会话 → 401', async () => {
     const res = await appAuth.inject({ method: 'GET', url: '/api/apps' })
     assert.strictEqual(res.statusCode, 401)
     assert.ok(res.json().code === 'UNAUTHORIZED')
   })
 
-  it('错误凭据 → 401', async () => {
+  it('登录：错误凭据 → 401', async () => {
+    const res = await appAuth.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'admin', pass: 'wrong' },
+    })
+    assert.strictEqual(res.statusCode, 401)
+    assert.ok(res.json().code === 'AUTH_FAILED')
+  })
+
+  it('登录：空用户名 → 400', async () => {
+    const res = await appAuth.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: '', pass: 'test123' },
+    })
+    assert.strictEqual(res.statusCode, 400)
+    assert.ok(res.json().code === 'INVALID_INPUT')
+  })
+
+  it('登录：空密码 → 400', async () => {
+    const res = await appAuth.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'admin', pass: '' },
+    })
+    assert.strictEqual(res.statusCode, 400)
+    assert.ok(res.json().code === 'INVALID_INPUT')
+  })
+
+  it('登录：缺少 user 字段 → 400', async () => {
+    const res = await appAuth.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { pass: 'test123' },
+    })
+    assert.strictEqual(res.statusCode, 400)
+    assert.ok(res.json().code === 'INVALID_INPUT')
+  })
+
+  it('登录：超长用户名 → 400', async () => {
+    const res = await appAuth.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'a'.repeat(129), pass: 'test123' },
+    })
+    assert.strictEqual(res.statusCode, 400)
+    assert.ok(res.json().code === 'INVALID_INPUT')
+  })
+
+  it('登录：remember=true → 成功，cookie maxAge 延长', async () => {
+    const res = await appAuth.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { user: 'admin', pass: 'test123', remember: true },
+    })
+    assert.strictEqual(res.statusCode, 200)
+    assert.ok(res.json().ok)
+    const cookie = res.cookies.find(c => c.name === 'ds-sid')
+    assert.ok(cookie)
+    // remember=true 时 maxAge 应为 7 天 = 604800 秒
+    assert.strictEqual(cookie.maxAge, 7 * 24 * 60 * 60)
+  })
+
+  it('登录成功 → 返回 session cookie', async () => {
+    const cookie = await login()
+    assert.ok(cookie, '应返回 ds-sid cookie')
+    assert.ok(cookie.value.length > 0)
+  })
+
+  it('有会话 → API 返回 200', async () => {
+    const cookie = await login()
     const res = await appAuth.inject({
       method: 'GET',
       url: '/api/apps',
-      headers: { authorization: 'Basic ' + Buffer.from('admin:wrong').toString('base64') },
+      cookies: { 'ds-sid': cookie.value },
+    })
+    if (res.statusCode === 500) return  // 引擎不可用时跳过
+    assert.notStrictEqual(res.statusCode, 401)
+  })
+
+  it('登出后 → 401', async () => {
+    const cookie = await login()
+    // 先登出
+    await appAuth.inject({
+      method: 'POST',
+      url: '/api/auth/logout',
+      cookies: { 'ds-sid': cookie.value },
+    })
+    // 登出后访问 API
+    const res = await appAuth.inject({
+      method: 'GET',
+      url: '/api/apps',
+      cookies: { 'ds-sid': cookie.value },
     })
     assert.strictEqual(res.statusCode, 401)
   })
 
-  it('正确凭据 → 200', async () => {
-    const res = await appAuth.inject({
-      method: 'GET',
-      url: '/api/apps',
-      headers: { authorization: 'Basic ' + Buffer.from('admin:test123').toString('base64') },
-    })
-    if (res.statusCode === 500) return  // 引擎不可用时跳过
-    // 认证通过后可能返回 200 或业务错误（如引擎不可用）
+  it('SSE 端点免认证', async () => {
+    const res = await appAuth.inject({ method: 'GET', url: '/api/events' })
     assert.notStrictEqual(res.statusCode, 401)
   })
 
-  it('SSE 端点免认证 → 400 (缺少 taskId 而非 401)', async () => {
-    const res = await appAuth.inject({ method: 'GET', url: '/api/events' })
-    // 免认证路径应返回业务错误码（400/404）而非 401
-    assert.notStrictEqual(res.statusCode, 401)
+  it('登录端点免认证', async () => {
+    const res = await appAuth.inject({ method: 'GET', url: '/api/auth/status' })
+    assert.strictEqual(res.statusCode, 200)
   })
 })
 

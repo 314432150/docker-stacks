@@ -7,8 +7,10 @@ import Backup from './views/Backup.vue'
 import Restore from './views/Restore.vue'
 import Deploy from './views/Deploy.vue'
 import Settings from './views/Settings.vue'
+import Login from './views/Login.vue'
 
 const routes = [
+  { path: '/login', component: Login, meta: { guest: true } },
   { path: '/', component: Dashboard },
   { path: '/backup', component: Backup },
   { path: '/restore', component: Restore },
@@ -19,6 +21,32 @@ const routes = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
+})
+
+// ── 全局认证守卫：未登录 → 跳转登录页 ──
+let authChecked = false
+let isAuthenticated = false
+
+router.beforeEach(async (to) => {
+  // 登录页免检
+  if (to.meta.guest) return true
+
+  // 首次导航时检查认证状态
+  if (!authChecked) {
+    try {
+      const res = await fetch('/api/auth/status')
+      const data = await res.json()
+      isAuthenticated = data.authenticated
+    } catch {
+      isAuthenticated = false
+    }
+    authChecked = true
+  }
+
+  if (!isAuthenticated) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+  return true
 })
 
 const app = createApp(App)

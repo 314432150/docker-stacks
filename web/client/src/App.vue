@@ -1,13 +1,20 @@
 <script setup>
 import { h, ref, onMounted, onUnmounted, computed, watchEffect, KeepAlive } from 'vue'
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router'
 import {
   NLayout, NLayoutHeader, NLayoutContent, NMenu, NText, NSpace,
-  NConfigProvider, NButton, NIcon, darkTheme,
+  NConfigProvider, NButton, NIcon, darkTheme, NMessageProvider,
 } from 'naive-ui'
-import { CubeOutline, SunnyOutline, MoonOutline, SettingsOutline } from '@vicons/ionicons5'
+import { CubeOutline, SunnyOutline, MoonOutline, LogOutOutline } from '@vicons/ionicons5'
+
+const router = useRouter()
+const route = useRoute()
 
 const THEME_KEY = 'ds-web-theme'
+
+// ── 认证状态 ──
+const currentUser = ref('')
+const isLoginPage = computed(() => route.path === '/login')
 
 // ── 主题状态：null=跟随系统, 'light'=明亮, 'dark'=暗黑 ──
 const userPreference = ref(localStorage.getItem(THEME_KEY) || null)
@@ -48,6 +55,9 @@ let mediaQuery
 let onSystemChange
 
 onMounted(() => {
+  // 检查认证状态
+  checkAuth()
+  // 监听系统主题变化
   mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   onSystemChange = () => {
     if (userPreference.value === null) {
@@ -56,6 +66,29 @@ onMounted(() => {
   }
   mediaQuery.addEventListener('change', onSystemChange)
 })
+
+async function checkAuth() {
+  try {
+    const res = await fetch('/api/auth/status')
+    const data = await res.json()
+    if (data.authenticated) {
+      currentUser.value = data.user || ''
+    } else {
+      currentUser.value = ''
+    }
+  } catch {
+    currentUser.value = ''
+  }
+}
+
+async function logout() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' })
+  } catch { /* ignore */ }
+  currentUser.value = ''
+  router.push('/login')
+  // 使用 window.$message 或直接跳过（登录页不需要 toast）
+}
 
 onUnmounted(() => {
   if (mediaQuery && onSystemChange) {
@@ -79,31 +112,47 @@ const menuItems = [
 
 <template>
   <n-config-provider :theme="isDark ? darkTheme : null">
-    <n-layout style="min-height: 100vh">
-      <n-layout-header bordered>
-        <n-space align="center" justify="space-between" style="padding: 0 24px; height: 56px">
-          <n-space align="center">
-            <n-icon size="24" :component="CubeOutline" />
-            <n-text strong style="font-size: 18px">docker-stacks</n-text>
+    <n-message-provider>
+      <!-- 登录页：无导航栏 -->
+      <n-layout v-if="isLoginPage" style="min-height: 100vh">
+        <n-layout-content content-style="padding: 24px; max-width: 1200px; margin: 0 auto">
+          <RouterView />
+        </n-layout-content>
+      </n-layout>
+
+      <!-- 正常页面：带导航栏 -->
+      <n-layout v-else style="min-height: 100vh">
+        <n-layout-header bordered>
+          <n-space align="center" justify="space-between" style="padding: 0 24px; height: 56px">
+            <n-space align="center">
+              <n-icon size="24" :component="CubeOutline" />
+              <n-text strong style="font-size: 18px">docker-stacks</n-text>
+            </n-space>
+            <n-space align="center">
+              <n-menu mode="horizontal" :options="menuItems" :default-value="'/'" />
+              <n-text v-if="currentUser" depth="3" style="font-size:13px">{{ currentUser }}</n-text>
+              <n-button quaternary circle size="small" @click="toggleTheme" :title="themeLabel">
+                <template #icon>
+                  <n-icon :component="isDark ? SunnyOutline : MoonOutline" />
+                </template>
+              </n-button>
+              <n-button quaternary circle size="small" @click="logout" title="退出登录">
+                <template #icon>
+                  <n-icon :component="LogOutOutline" />
+                </template>
+              </n-button>
+            </n-space>
           </n-space>
-          <n-space align="center">
-            <n-menu mode="horizontal" :options="menuItems" :default-value="'/'" />
-            <n-button quaternary circle size="small" @click="toggleTheme" :title="themeLabel">
-              <template #icon>
-                <n-icon :component="isDark ? SunnyOutline : MoonOutline" />
-              </template>
-            </n-button>
-          </n-space>
-        </n-space>
-      </n-layout-header>
-      <n-layout-content content-style="padding: 24px; max-width: 1200px; margin: 0 auto">
-        <RouterView v-slot="{ Component }">
-          <KeepAlive>
-            <component :is="Component" />
-          </KeepAlive>
-        </RouterView>
-      </n-layout-content>
-    </n-layout>
+        </n-layout-header>
+        <n-layout-content content-style="padding: 24px; max-width: 1200px; margin: 0 auto">
+          <RouterView v-slot="{ Component }">
+            <KeepAlive>
+              <component :is="Component" />
+            </KeepAlive>
+          </RouterView>
+        </n-layout-content>
+      </n-layout>
+    </n-message-provider>
   </n-config-provider>
 </template>
 

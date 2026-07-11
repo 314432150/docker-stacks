@@ -2,6 +2,7 @@
 // 注册路由、静态文件托管、启动服务
 
 import Fastify from 'fastify'
+import fastifyCookie from '@fastify/cookie'
 import fastifyStatic from '@fastify/static'
 import { PORT, HOST, STATIC_DIR } from './config.js'
 import { addAuthHook } from './plugins/auth.js'
@@ -13,6 +14,7 @@ import eventsRoutes from './routes/events.js'
 import settingsRoutes from './routes/settings.js'
 import backupsRoutes from './routes/backups.js'
 import historyRoutes from './routes/history.js'
+import authRoutes from './routes/auth.js'
 import statusRoutes from './routes/status.js'
 
 export async function buildApp(opts = {}) {
@@ -58,10 +60,16 @@ export async function buildApp(opts = {}) {
     }
   })
 
+  // ── Cookie 解析（Session 依赖） ──
+  await fastify.register(fastifyCookie, {
+    secret: process.env.COOKIE_SECRET || 'ds-cookie-secret-change-me',
+  })
+
   // ── 认证钩子（根作用域，覆盖全部路由） ──
   addAuthHook(fastify)
 
   // ── 注册路由 ──
+  await fastify.register(authRoutes)
   await fastify.register(appsRoutes)
   await fastify.register(backupRoutes)
   await fastify.register(restoreRoutes)
