@@ -21,7 +21,8 @@ services:
 
     volumes:
       # 挂载整个 docker-stacks 仓库（引擎脚本、应用栈、备份目录）
-      - /srv/docker-stacks:/srv/docker-stacks
+      # 源路径用相对路径（相对于 compose 文件所在目录），适配任意 clone 位置
+      - ../..:/srv/docker-stacks
 
       # Docker socket：deploy 命令需要执行 docker compose
       - /var/run/docker.sock:/var/run/docker.sock
