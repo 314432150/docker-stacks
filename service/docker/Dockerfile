@@ -6,11 +6,14 @@ FROM node:22-slim
 #  - wget:            healthcheck 探测
 #  - curl:            WebDAV 上传/下载/列表
 #  - ca-certificates: HTTPS 校验证书链
+#  - python3:         shell 脚本读取 settings.json
 #  - docker.io:       docker compose 命令（通过挂载的 docker.sock 操作宿主机）
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
     ca-certificates \
+    python3 \
     docker.io \
     && rm -rf /var/lib/apt/lists/*
 

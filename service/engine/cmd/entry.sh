@@ -30,14 +30,21 @@ SELF="$(_resolve_self)"
 ROOT="$(cd "$(dirname "$SELF")/../../.." && pwd)"    # /srv/docker-stacks
 ENGINE_DIR="$(dirname "$SELF")"                       # .../service/engine/cmd
 LIB_DIR="$(cd "$(dirname "$SELF")/../lib" && pwd)"    # .../service/engine/lib
-BACKUP_ROOT="${BACKUP_ROOT:-${ROOT}/backups}"
+BACKUP_ROOT="${BACKUP_ROOT:-${ROOT}/instance/backups}"
 
-# ── 加载全局配置 ──
-if [[ -f "${ROOT}/global.env" ]]; then
-    set -a; source "${ROOT}/global.env"; set +a
-fi
-if [[ -f "${ROOT}/service/web.env" ]]; then
-    set -a; source "${ROOT}/service/web.env"; set +a
+# WebDAV 配置：优先使用环境变量（server spawn 时已传入），否则从 settings.json 读取
+if [[ -z "${WEBDAV_URL:-}" ]]; then
+    _json="${ROOT}/service/web/server/data/settings.json"
+    if [[ -f "$_json" ]] && command -v python3 &>/dev/null; then
+        eval "$(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1])).get("webdav",{})
+for k in ["url","user","pass"]:
+    v = d.get(k,"")
+    if v:
+        print(f"export WEBDAV_{k.upper()}=\"{v}\"")
+' "$_json")"
+    fi
 fi
 
 # ── 加载 lib 纯工具库 ──

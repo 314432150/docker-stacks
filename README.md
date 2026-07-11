@@ -6,13 +6,24 @@ NAS 上运行的 Docker Compose 服务编排仓库，部署在 `/srv/docker-stac
 
 ```text
 docker-stacks/
-├── global.env               # 全局基础环境变量（NAS_IP、PUID/PGID、存储路径、代理），所有 stack 共享
+├── instance/                  # 运行时数据（不进 Git 的数据文件）
+│   ├── global.env            #   全局基础环境变量（NAS_IP、PUID/PGID、存储路径、代理），所有 stack 共享
+│   ├── backups/              #   备份输出目录，不进 Git
+│   └── stacks/               #   9 个 Docker Compose 应用
+│       ├── homeassistant/    #     智能家居
+│       ├── jellyfin/         #     媒体服务器
+│       ├── lucky/            #     DDNS / 反向代理 / SSL 证书
+│       ├── metacubex/        #     代理（Mihomo / Clash Meta）
+│       ├── metatube/         #     元数据刮削
+│       ├── mosquitto/        #     MQTT 消息代理
+│       ├── openclaw/         #     聊天机器人框架
+│       ├── vaultwarden/      #     密码管理器（Bitwarden 兼容）
+│       └── xunlei/           #     迅雷下载
 ├── service/                  # 基础服务层
 │   ├── docker/               #   容器编排（Dockerfile + compose.yml）
 │   │   ├── Dockerfile
 │   │   └── compose.yml       #     ds-web 服务定义
-│   ├── web.env               #   Web 系统配置（认证 + WebDAV 备份），不进 Git
-│   ├── web.env.example
+│   ├── web.env.example       #   服务配置说明（auth 在 compose.yml 设，WebDAV 在 Web UI 配置）
 │   ├── engine/               #   引擎脚本集
 │   │   ├── cmd/              #     命令实现层（组装 lib → cmd_*，输出 JSONL）
 │   │   │   ├── entry.sh      #       主入口 / 路由分发
@@ -31,18 +42,6 @@ docker-stacks/
 │   └── web/                  #   Web 前后端源码
 │       ├── client/           #     Vue 前端
 │       └── server/           #     Node 后端
-├── backups/                 # 备份输出目录，不进 Git
-│
-└── stacks/                  # 9 个 Docker Compose 应用
-    ├── homeassistant/       # 智能家居
-    ├── jellyfin/            # 媒体服务器
-    ├── lucky/               # DDNS / 反向代理 / SSL 证书
-    ├── metacubex/           # 代理（Mihomo / Clash Meta）
-    ├── metatube/            # 元数据刮削
-    ├── mosquitto/           # MQTT 消息代理
-    ├── openclaw/            # 聊天机器人框架
-    ├── vaultwarden/         # 密码管理器（Bitwarden 兼容）
-    └── xunlei/              # 迅雷下载
 ```
 
 ## 快速开始
@@ -54,12 +53,12 @@ git clone https://github.com/314432150/docker-stacks.git /srv/docker-stacks
 cd /srv/docker-stacks
 
 # 2. 修改环境变量（按需调整 NAS_IP、存储路径等）
-cp global.env.example global.env
-vim global.env
+cp instance/global.env.example instance/global.env
+vim instance/global.env
 
-# 3. 配置 Web 系统（可选：Web 界面认证、远程 WebDAV 备份）
-cp service/web.env.example service/web.env
-vim service/web.env
+# 3. 配置 Web 管理面板（可选）
+#    认证：编辑 service/docker/compose.yml 中的 WEB_USER / WEB_PASS
+#    WebDAV：启动后通过 Web UI → 设置 → WebDAV 配置
 
 # 4. 部署所有应用
 sudo bash service/engine/cmd/entry.sh deploy homeassistant jellyfin lucky metacubex metatube mosquitto openclaw vaultwarden xunlei
@@ -77,7 +76,7 @@ sudo bash service/engine/cmd/entry.sh discover
 sudo bash service/engine/cmd/entry.sh backup homeassistant jellyfin
 
 # 从备份还原
-sudo bash service/engine/cmd/entry.sh restore backups/20260711-031727_homeassistant.tar.gz homeassistant
+sudo bash service/engine/cmd/entry.sh restore instance/backups/20260711-031727_homeassistant.tar.gz homeassistant
 
 # 部署应用
 sudo bash service/engine/cmd/entry.sh deploy homeassistant jellyfin
@@ -100,21 +99,27 @@ sudo bash service/engine/cmd/entry.sh deploy homeassistant jellyfin
 
 ### 配置
 
-在 `service/web.env` 中设置：
+WebDAV 配置通过 **Web 管理面板 → 设置 → WebDAV** 进行，数据存储在 `service/web/server/data/settings.json` 中。
 
-```bash
-WEBDAV_URL=https://your-webdav-server.com/path
-WEBDAV_USER=your_username
-WEBDAV_PASS=your_password
+或者手动编辑：
+
+```json
+{
+  "webdav": {
+    "url": "https://your-webdav-server.com/path",
+    "user": "your_username",
+    "pass": "your_password"
+  }
+}
 ```
 
 ### 坚果云 配置示例
 
 1. 登录 [坚果云](https://www.jianguoyun.com/)
 2. 进入 **账户信息 → 安全选项 → 第三方应用管理**，添加应用，生成专用密码
-3. 在坚果云中创建目录，填入 `global.env` 即可
+3. 在坚果云中创建目录，填入 Web 管理面板即可
 
-> ⚠️ **安全提示**：`global.env` 和 `web.env` 含敏感凭据，不进 Git（`.gitignore` 已忽略）。仓库提供 `.example` 模板。
+> ⚠️ **安全提示**：`instance/global.env` 和 `settings.json` 含敏感凭据，不进 Git（`.gitignore` 已忽略）。
 
 ### 使用
 
@@ -124,13 +129,13 @@ WebDAV 函数通过 `lib/webdav.sh` 暴露，可在脚本中调用：
 source service/engine/lib/webdav.sh
 
 # 上传
-webdav_upload backups/file.tar.gz file.tar.gz
+webdav_upload instance/backups/file.tar.gz file.tar.gz
 
 # 列出远程文件
 webdav_list
 
 # 下载
-webdav_download file.tar.gz backups/file.tar.gz
+webdav_download file.tar.gz instance/backups/file.tar.gz
 ```
 
 ## 运行测试

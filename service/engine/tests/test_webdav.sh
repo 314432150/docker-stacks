@@ -8,9 +8,19 @@ source "${SCRIPT_DIR}/_helpers.sh"
 echo "[11] WebDAV 集成测试"
 _cleanup
 
-# 加载 WebDAV 配置
-if [[ -f "${ROOT}/service/web.env" ]]; then
-    set -a; source "${ROOT}/service/web.env"; set +a
+# 加载 WebDAV 配置（优先 env，否则从 settings.json 读取）
+if [[ -z "${WEBDAV_URL:-}" ]]; then
+    _json="${ROOT}/service/web/server/data/settings.json"
+    if [[ -f "$_json" ]] && command -v python3 &>/dev/null; then
+        eval "$(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1])).get("webdav",{})
+for k in ["url","user","pass"]:
+    v = d.get(k,"")
+    if v:
+        print(f"export WEBDAV_{k.upper()}=\"{v}\"")
+' "$_json")"
+    fi
 fi
 
 # 加载 webdav 模块
@@ -27,7 +37,7 @@ if webdav_connection_test; then
     PASS=$((PASS + 1))
 
     # 11c: 上传测试文件
-    test_file="${ROOT}/backups/_webdav_test_upload.tar.gz"
+    test_file="${ROOT}/instance/backups/_webdav_test_upload.tar.gz"
     echo "test" > /tmp/_test_content
     tar -czf "$test_file" -C /tmp _test_content 2>/dev/null || true
     rm -f /tmp/_test_content
@@ -46,7 +56,7 @@ if webdav_connection_test; then
         _assert_contains "webdav_list 含测试文件" "$remote_list" "_webdav_test_upload"
 
         # 11e: 下载验证
-        dl_path="${ROOT}/backups/_webdav_test_download.tar.gz"
+        dl_path="${ROOT}/instance/backups/_webdav_test_download.tar.gz"
         if webdav_download "_webdav_test_upload.tar.gz" "$dl_path"; then
             echo "  ✓ webdav_download 成功"
             PASS=$((PASS + 1))

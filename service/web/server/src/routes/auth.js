@@ -44,7 +44,7 @@ export default async function authRoutes(fastify) {
   // GET /api/auth/status — 检查登录状态
   fastify.get('/api/auth/status', async (request) => {
     if (!isAuthEnabled()) {
-      return { ok: true, authenticated: false, authEnabled: false }
+      return { ok: true, authenticated: true, authEnabled: false }
     }
 
     const session = getSession(request)

@@ -21,7 +21,7 @@ if [[ -n "$_test_app" ]]; then
     "$ENGINE" backup "$_test_app" &>/dev/null
     set -e
 
-    test_archive=$(ls -1t "${ROOT}/backups"/*.tar.gz 2>/dev/null | head -1)
+    test_archive=$(ls -1t "${ROOT}/instance/backups"/*.tar.gz 2>/dev/null | head -1)
     if [[ -n "$test_archive" ]] && [[ -f "$test_archive" ]]; then
         restore_out=""
         set +e; restore_out=$("$ENGINE" restore "$test_archive" "$_test_app" 2>/dev/null || true); set -e
@@ -37,7 +37,7 @@ if [[ -n "$_test_app" ]]; then
 
         # 清理
         rm -f "$test_archive"
-        rm -rf "${ROOT}/backups"/pre_restore_* 2>/dev/null || true
+        rm -rf "${ROOT}/instance/backups"/pre_restore_* 2>/dev/null || true
     else
         echo "  - 跳过: 无测试备份"
     fi

@@ -9,8 +9,6 @@ echo "[10] lib 可复用函数完整性"
 
 LIB="${ROOT}/service/engine/lib"
 for fn in discover_apps get_backup_dirs get_description parse_volumes \
-          init_state select_all_recommended get_selected_dirs has_any_selected \
-          toggle_app is_selected toggle_dir \
           webdav_configured webdav_connection_test webdav_upload \
           webdav_list webdav_download webdav_file_size; do
     found=0

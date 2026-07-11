@@ -56,7 +56,7 @@ service/engine/
 ```
 职责：
   - 解析自身路径 → ROOT / LIB_DIR / BACKUP_ROOT
-  - 加载 global.env 和 service/web.env
+  - 加载 service/web/server/data/settings.json（WebDAV 配置）
   - 按依赖顺序 source lib/ → cmd/_lib.sh → cmd/discover → cmd/backup → cmd/restore → cmd/deploy
   - 解析 $1 子命令，路由到对应 cmd_* 函数
 
@@ -237,9 +237,9 @@ sudo service/engine/cmd/entry.sh backup --upload homeassistant
 
 ```bash
 source service/engine/lib/webdav.sh
-webdav_upload backups/file.tar.gz file.tar.gz
+webdav_upload instance/backups/file.tar.gz file.tar.gz
 webdav_list
-webdav_download file.tar.gz backups/file.tar.gz
+webdav_download file.tar.gz instance/backups/file.tar.gz
 ```
 
 设计原则：

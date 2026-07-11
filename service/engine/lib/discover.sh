@@ -3,7 +3,7 @@
 # ============================================================
 
 discover_apps() {
-    for compose_file in "${ROOT}"/stacks/*/compose.yml; do
+    for compose_file in "${ROOT}"/instance/stacks/*/compose.yml; do
         [[ -f "${compose_file}" ]] || continue
         local name
         name="$(basename "$(dirname "${compose_file}")")"
@@ -63,7 +63,7 @@ parse_volumes() {
 
 get_backup_dirs() {
     local name="$1"
-    local compose_file="${ROOT}/stacks/${name}/compose.yml"
+    local compose_file="${ROOT}/instance/stacks/${name}/compose.yml"
 
     if [[ -f "$compose_file" ]]; then
         parse_volumes "$compose_file"
@@ -72,7 +72,7 @@ get_backup_dirs() {
 
 get_description() {
     local name="$1"
-    local compose_file="${ROOT}/stacks/${name}/compose.yml"
+    local compose_file="${ROOT}/instance/stacks/${name}/compose.yml"
 
     if [[ -f "$compose_file" ]]; then
         grep -m1 -E '^[[:space:]]*#[[:space:]]*=+' "$compose_file" 2>/dev/null | \

@@ -64,6 +64,6 @@ _assert_contains() {
 _cleanup() {
     rm -f "${ROOT}/.cache/engine.lock" 2>/dev/null || true
     rm -f /tmp/docker-stacks-engine/engine.lock 2>/dev/null || true
-    rm -f "${ROOT}/backups"/2026*openclaw* "${ROOT}/backups"/_test_* 2>/dev/null || true
-    rm -rf "${ROOT}/backups"/pre_restore_* 2>/dev/null || true
+    rm -f "${ROOT}/instance/backups"/2026*openclaw* "${ROOT}/instance/backups"/_test_* 2>/dev/null || true
+    rm -rf "${ROOT}/instance/backups"/pre_restore_* 2>/dev/null || true
 }

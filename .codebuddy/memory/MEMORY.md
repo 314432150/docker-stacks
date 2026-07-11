@@ -4,7 +4,7 @@
 
 - 服务器 IP: `192.168.1.146`
 - 项目路径: `/opt/docker-stacks/`
-- 备份目录: `/opt/docker-stacks/backups/`
+- 备份目录: `/opt/docker-stacks/instance/backups/`
 - 全局命令: `ds-backup`（交互式备份+还原），已废弃 `ds-restore`
 
 ## Docker Compose 约定
@@ -44,4 +44,4 @@
 ## 协作约定
 
 - 功能实现并测试通过后，AI 应自行 `git add -A && git commit` 提交变更
-- .gitignore: `stacks/openclaw/data/config/workspace/`（嵌套 git 仓库，不应被外层管理）
+- .gitignore: `instance/stacks/openclaw/data/config/workspace/`（嵌套 git 仓库，不应被外层管理）

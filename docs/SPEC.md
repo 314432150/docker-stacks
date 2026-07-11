@@ -77,7 +77,7 @@
 {"type":"start","op":"backup","file":"20260711-0230_qbittorrent.tar.gz","apps":["qbittorrent"]}
 {"type":"progress","step":"收集 qbittorrent/data"}
 {"type":"progress","step":"打包 3 个目录","current":1,"total":1}
-{"type":"done","file":"20260711-0230_qbittorrent.tar.gz","size":"12M","path":"/srv/docker-stacks/backups/20260711-0230_qbittorrent.tar.gz"}
+{"type":"done","file":"20260711-0230_qbittorrent.tar.gz","size":"12M","path":"/srv/docker-stacks/instance/backups/20260711-0230_qbittorrent.tar.gz"}
 ```
 
 **有目录不存在**：
@@ -241,9 +241,9 @@ WebDAV 上传失败时：
 - `3`：docker compose 不可用
 
 ### .env 符号链接
-- global.env 存在 → 自动为每个 app 创建 `stacks/<app>/.env → ../../global.env`
+- global.env 存在 → 自动为每个 app 创建 `instance/stacks/<app>/.env → ../../global.env`
 - global.env 不存在 → 跳过，emit progress
-- web.env 仅由 ds-web 和引擎消费（Web 界面认证 + 远程 WebDAV），不暴露给各 stack
+- WebDAV 配置由 Web 后端管理（settings.json），引擎通过环境变量获取（server spawn 时传入）
 
 ### 容器生命周期
 - 部署前先 `docker compose down`（如果有运行中的）

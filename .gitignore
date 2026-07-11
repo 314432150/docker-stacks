@@ -1,29 +1,29 @@
 # ==================== 数据目录策略 ====================
 # 仓库即模板：仅保留目录结构和必须的配置文件
-# 运行时数据通过容器内功能备份到对应的 backups/ 目录
+# 实例数据通过容器内功能备份到对应的 instance/backups/ 目录
 
 # 忽略 data/ 下所有文件
-stacks/*/data/**/*
+instance/stacks/*/data/**/*
 # 重新包含目录（必须！否则 git 跳过子树，后续 ! 规则全部无效）
-!stacks/*/data/**/
+!instance/stacks/*/data/**/
 
 # 保留 .gitkeep（维持目录结构）
-!stacks/*/data/**/.gitkeep
+!instance/stacks/*/data/**/.gitkeep
 
 # 必须保留的模板配置文件（.example）
 # 用户需复制为正式文件名后修改使用，git pull 不会覆盖本地配置
-!stacks/metacubex/data/mihomo/config.yaml.example
-!stacks/mosquitto/data/config/mosquitto.conf.example
+!instance/stacks/metacubex/data/mihomo/config.yaml.example
+!instance/stacks/mosquitto/data/config/mosquitto.conf.example
 
 # ==================== 通用忽略 ====================
 
 
 # 离线备份 — 只跟踪目录本身，不跟踪备份内容
-backups/*
-!backups/.gitkeep
+instance/backups/*
+!instance/backups/.gitkeep
 
 # openclaw 内嵌 workspace（含自己的 .git 仓库，不应被外层仓库管理）
-stacks/openclaw/data/config/workspace/
+instance/stacks/openclaw/data/config/workspace/
 
 # 运行时缓存
 .cache/
@@ -31,8 +31,10 @@ node_modules/
 .vite/
 
 # 真实配置（含敏感凭据，禁止入库；请用 *.example 复制后填写）
-global.env
-service/web.env
+instance/global.env
+
+# Web 服务运行时数据（settings.json 含 WebDAV 凭据等）
+service/web/server/data/
 
 # 系统与编辑器
 .DS_Store

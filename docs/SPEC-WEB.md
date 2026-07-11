@@ -131,7 +131,7 @@
 {"error":true,"code":"VALIDATION_ERROR","message":"archive 不能为空"}
 
 // 404 — 备份文件不存在
-{"error":true,"code":"FILE_NOT_FOUND","message":"备份文件不存在: /srv/docker-stacks/backups/xxx.tar.gz"}
+{"error":true,"code":"FILE_NOT_FOUND","message":"备份文件不存在: /srv/docker-stacks/instance/backups/xxx.tar.gz"}
 ```
 
 ---

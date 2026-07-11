@@ -6,8 +6,8 @@
 # ── 内部：确保 .env 符号链接 ──
 _ensure_env_link() {
     local app="$1"
-    local compose_dir="${ROOT}/stacks/${app}"
-    local global_env="${ROOT}/global.env"
+    local compose_dir="${ROOT}/instance/stacks/${app}"
+    local global_env="${ROOT}/instance/global.env"
 
     if [[ ! -f "$global_env" ]]; then return 0; fi
     if [[ ! -d "$compose_dir" ]]; then return 0; fi
@@ -48,7 +48,7 @@ cmd_deploy() {
 
     local success=0 fail=0
     for app in "${apps[@]}"; do
-        local compose_dir="${ROOT}/stacks/${app}"
+        local compose_dir="${ROOT}/instance/stacks/${app}"
 
         # .env 链接
         _ensure_env_link "$app"

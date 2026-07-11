@@ -28,7 +28,7 @@ _build_backup_paths() {
     for d in "${dirs[@]}"; do
         local app_rel="stacks/${name}"
 
-        local full_path="${ROOT}/${app_rel}/${d}"
+        local full_path="${ROOT}/instance/${app_rel}/${d}"
         [[ -d "$full_path" ]] && echo "${app_rel}/${d}|ok" || echo "${d}|skip"
     done
 }
@@ -192,7 +192,7 @@ cmd_backup() {
     _emit "{\"type\":\"progress\",\"step\":\"打包 ${#paths[@]} 个目录\",\"current\":1,\"total\":1}"
 
     local error_file; error_file="$(mktemp)"
-    if tar -czf "$archive" -C "$ROOT" "${paths[@]}" 2>"$error_file"; then
+    if tar -czf "$archive" -C "${ROOT}/instance" "${paths[@]}" 2>"$error_file"; then
         local size; size="$(du -h "$archive" 2>/dev/null | cut -f1)"
         _emit "{\"type\":\"ok\",\"app\":\"${archive_name}\"}"
 

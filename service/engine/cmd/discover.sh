@@ -29,7 +29,7 @@ cmd_discover() {
             $dir_first || echo -n ','
             dir_first=false
 
-            local check_path="${ROOT}/stacks/${esc_name}/${src}"
+            local check_path="${ROOT}/instance/stacks/${esc_name}/${src}"
             local esc_src; esc_src="$(_escape_json "$src")"
 
             local exists=false

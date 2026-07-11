@@ -30,7 +30,7 @@ _pre_restore_backup() {
 
     local app_path="stacks/${app}"
 
-    local target="${ROOT}/${app_path}"
+    local target="${ROOT}/instance/${app_path}"
     if [[ ! -d "$target" ]] || [[ -z "$(ls -A "$target" 2>/dev/null)" ]]; then
         return 0  # 无内容，不需备份
     fi
@@ -43,11 +43,11 @@ _pre_restore_backup() {
         local safe_fn; safe_fn="$(echo "$dir_path" | tr '/' '_')"
         local pre_archive="${pre_dir}/${safe_fn}.tar.gz"
 
-        local check_path="${ROOT}/${dir_path}"
+        local check_path="${ROOT}/instance/${dir_path}"
         if [[ -d "$check_path" ]]; then
             _emit "{\"type\":\"progress\",\"step\":\"安全备份 ${dir_path}\"}"
             local tar_err; tar_err="$(mktemp)"
-            if tar -czf "$pre_archive" -C "$ROOT" "${dir_path}" 2>"$tar_err"; then
+            if tar -czf "$pre_archive" -C "${ROOT}/instance" "${dir_path}" 2>"$tar_err"; then
                 _emit "{\"type\":\"progress\",\"step\":\"安全备份完成: ${pre_archive##*${BACKUP_ROOT}/}\"}"
                 rm -f "$tar_err"
             else
@@ -62,7 +62,7 @@ _pre_restore_backup() {
 # ── 内部：容器管理 ──
 _docker_stop() {
     local app="$1"
-    local compose_dir="${ROOT}/stacks/${app}"
+    local compose_dir="${ROOT}/instance/stacks/${app}"
 
     if [[ ! -f "${compose_dir}/compose.yml" ]]; then return 0; fi
     if ! command -v docker &>/dev/null || ! docker compose version &>/dev/null 2>&1; then
@@ -80,7 +80,7 @@ _docker_stop() {
 
 _docker_start() {
     local app="$1"
-    local compose_dir="${ROOT}/stacks/${app}"
+    local compose_dir="${ROOT}/instance/stacks/${app}"
 
     if [[ ! -f "${compose_dir}/compose.yml" ]]; then return 0; fi
     if ! command -v docker &>/dev/null || ! docker compose version &>/dev/null 2>&1; then
@@ -135,7 +135,7 @@ cmd_restore() {
 
         _emit "{\"type\":\"progress\",\"step\":\"解压 ${app}\",\"current\":$((success + fail + 1)),\"total\":${#apps[@]}}"
 
-        if tar --same-owner -xzf "$archive" -C "$ROOT" "$app_path" 2>/dev/null; then
+        if tar --same-owner -xzf "$archive" -C "${ROOT}/instance" "$app_path" 2>/dev/null; then
             _emit "{\"type\":\"ok\",\"app\":\"${app}\"}"
             ((success++)) || true
         else
